@@ -11,8 +11,21 @@ import { arcTestnet } from "viem/chains";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import * as readline from "node:readline/promises";
 
+
 // --- Parse CLI args ---
 function parseArgs() {
+  const originalFetch = globalThis.fetch;
+globalThis.fetch = async (...args) => {
+  const res = await originalFetch(...args);
+  if (res.status === 402) {
+    const clone = res.clone();
+    clone.json().then((body) => {
+      console.log('[DEBUG 402 body]', JSON.stringify(body));
+    }).catch(() => {});
+  }
+  return res;
+};
+
   const args = process.argv.slice(2);
   let spendingLimit: number | null = null;
 

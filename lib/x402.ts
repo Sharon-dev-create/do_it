@@ -108,9 +108,23 @@ export function withGateway(
         Buffer.from(paymentSignature, "base64").toString("utf-8"),
       );
 
+      const acceptedRequirements =
+        paymentPayload.accepted &&
+        typeof paymentPayload.accepted === "object"
+          ? ({
+              ...requirements,
+              ...paymentPayload.accepted,
+              extra: {
+                ...requirements.extra,
+                ...((paymentPayload.accepted as Record<string, unknown>)
+                  .extra as Record<string, unknown> | undefined),
+              },
+            } as typeof requirements)
+          : requirements;
+
       const verifyResult = await facilitator.verify(
         paymentPayload,
-        requirements,
+        acceptedRequirements,
       );
 
       if (!verifyResult.isValid) {
@@ -125,7 +139,7 @@ export function withGateway(
 
       const settleResult = await facilitator.settle(
         paymentPayload,
-        requirements,
+        acceptedRequirements,
       );
 
       if (!settleResult.success) {
