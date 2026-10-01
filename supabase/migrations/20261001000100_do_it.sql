@@ -23,7 +23,7 @@ create table public.submissions (
     id uuid primary key default gen_random_uuid(),
 
     task_id uuid not null 
-      references public.task(id)
+      references public.tasks(id)
        on delete cascade,
 
     worker_address text not null,
@@ -37,14 +37,14 @@ create table public.submissions (
       check (status in ('pending', 'approved', 'rejected')),
 
     created_at timestamptz not null default now(),
-    updated_at timestamptz  
+    verified_at timestamptz  
 );
 
 create table public.task_payments (
   id uuid primary key default gen_random_uuid(),
 
   task_id uuid not null
-    references public.task(id)
+    references public.tasks(id)
       on delete cascade,
 
   submission_id uuid
@@ -53,8 +53,8 @@ create table public.task_payments (
 
   worker_address text not null,
 
-  amount numeric(20, 6) not null
-    check (amount > 0),
+  amount_usdc numeric(20, 6) not null
+    check (amount_usdc > 0),
 
   status text not null default 'pending'
     check (status in ('pending', 'submitted', 'confirmed', 'failed')), 
@@ -64,7 +64,7 @@ create table public.task_payments (
   created_at timestamptz not null default now(),
   completed_at timestamptz
 );
-  
+
 create index task_status_idx on public.tasks(status);
 
 create index submissions_task_id_idx on public.submissions(task_id);
