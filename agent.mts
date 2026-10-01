@@ -174,6 +174,25 @@ const gateway = new GatewayClient({
   privateKey: ephemeralKey,
 });
 
+const originalCreatePaymentPayload = gateway.createPaymentPayload.bind(gateway);
+
+gateway.createPaymentPayload = async (...args) => {
+  const result = await originalCreatePaymentPayload(...args);
+
+  console.log("\n[DEBUG PAYMENT AUTH]");
+  console.log(JSON.stringify(result.payload.authorization, null, 2));
+
+  const now = Math.floor(Date.now() / 1000);
+  console.log("Current time:", now);
+  console.log(
+    "Validity seconds:",
+    Number(result.payload.authorization.validBefore) - now
+  );
+  console.log();
+
+  return result;
+};
+
 let index = 0;
 let inFlight = 0;
 let redepositing = false;
