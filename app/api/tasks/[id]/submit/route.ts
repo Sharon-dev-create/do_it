@@ -123,12 +123,64 @@ export async function POST(
       );
     }
 
-    return NextResponse.json({
-      submission,
-      payment,
-      correct: true,
-      message: "Task completed. Payment pending.",
-    });
+    try {
+        const payout = await payWorker(
+            String(task.reward_usdc),
+            worker_address as `0x${string}`,
+        );
+
+        const { data: confirmedPayment, error: paymentUpdateError } =
+          await supabase
+            .from("task_payments")
+            .update({
+              status: "confirmed",
+              tx_hash: payout.mintTxHash,
+              completed_at: new Date().toISOString(),
+            })
+            .eq("id", payment.id)
+            .select()
+            .single();
+
+          if (paymentUpdateError) {
+            console.error(
+                "Update payment after record error:",
+                paymentUpdateError
+            );
+
+            return NextResponse.json(
+                {
+                 error: "Payment was sent but failed to udate record",
+                 txHash: payout.mintTxHash,
+                },
+                { status: 500 },
+            );
+          }
+
+        return NextResponse.json({
+          submission,
+          correct: true,
+          message: "Task completed and worker paid successfully",
+          payment: confirmedPayment,
+          txHash: payout.mintTxHash,
+        });
+    } catch (payoutError) {
+        console.error("Payment error:", payoutError);
+
+        await supabase
+           .from("task_payments")
+           .update({
+                status: "failed",
+        })
+         .eq("id", payment.id);
+
+        return NextResponse.json(
+            {
+                error: "Task completed but payment failed",
+                payment,
+        },
+            { status: 500 },
+        ); 
+    }
   } catch (error) {
     console.error("Submit task error:", error);
 
