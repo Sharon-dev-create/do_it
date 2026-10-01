@@ -52,7 +52,7 @@ function buildPaymentRequirements(price: string) {
     asset: ARC_TESTNET_USDC,
     amount: amount.toString(),
     payTo: sellerAddress,
-    maxTimeoutSeconds: 345600,
+    maxTimeoutSeconds: 691200,
     extra: {
       name: "GatewayWalletBatched",
       version: "1",

@@ -174,9 +174,10 @@ const gateway = new GatewayClient({
   privateKey: ephemeralKey,
 });
 
-const originalCreatePaymentPayload = gateway.createPaymentPayload.bind(gateway);
+const gatewayAny = gateway as any;
+const originalCreatePaymentPayload = gatewayAny.createPaymentPayload.bind(gateway);
 
-gateway.createPaymentPayload = async (...args) => {
+gatewayAny.createPaymentPayload = async (...args: any[]) => {
   const result = await originalCreatePaymentPayload(...args);
 
   console.log("\n[DEBUG PAYMENT AUTH]");
@@ -186,7 +187,7 @@ gateway.createPaymentPayload = async (...args) => {
   console.log("Current time:", now);
   console.log(
     "Validity seconds:",
-    Number(result.payload.authorization.validBefore) - now
+    Number(result.payload.authorization.validBefore) - now,
   );
   console.log();
 
