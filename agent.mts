@@ -175,24 +175,24 @@ const gateway = new GatewayClient({
 });
 
 const gatewayAny = gateway as any;
-const originalCreatePaymentPayload = gatewayAny.createPaymentPayload.bind(gateway);
+// const originalCreatePaymentPayload = gatewayAny.createPaymentPayload.bind(gateway);
 
-gatewayAny.createPaymentPayload = async (...args: any[]) => {
-  const result = await originalCreatePaymentPayload(...args);
+// gatewayAny.createPaymentPayload = async (...args: any[]) => {
+//   const result = await originalCreatePaymentPayload(...args);
 
-  console.log("\n[DEBUG PAYMENT AUTH]");
-  console.log(JSON.stringify(result.payload.authorization, null, 2));
+//   console.log("\n[DEBUG PAYMENT AUTH]");
+//   console.log(JSON.stringify(result.payload.authorization, null, 2));
 
-  const now = Math.floor(Date.now() / 1000);
-  console.log("Current time:", now);
-  console.log(
-    "Validity seconds:",
-    Number(result.payload.authorization.validBefore) - now,
-  );
-  console.log();
+//   const now = Math.floor(Date.now() / 1000);
+//   console.log("Current time:", now);
+//   console.log(
+//     "Validity seconds:",
+//     Number(result.payload.authorization.validBefore) - now,
+//   );
+//   console.log();
 
-  return result;
-};
+//   return result;
+// };
 
 let index = 0;
 let inFlight = 0;
