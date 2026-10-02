@@ -15,6 +15,7 @@ export async function payWorker(
   const gateway = new GatewayClient({
     chain: "arcTestnet",
     privateKey: privateKey as `0x${string}`,
+    rpcUrl: process.env.ARC_RPC_URL,
   });
 
   const result = await gateway.withdraw(amount, {
