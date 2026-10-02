@@ -186,7 +186,7 @@ export async function POST(
 
         return NextResponse.json(
           {
-            error: "Task completed but payment record update failed",
+            error: "Payment succeeded but payment record update failed",
             correct: true,
             submission,
             payment: confirmedPayment ??{
@@ -197,6 +197,14 @@ export async function POST(
           { status: 500 },
         );
       }
+
+      return NextResponse.json({
+        submission,
+        correct: true,
+        message: "Task completed and worker paid successfully",
+        payment: confirmedPayment,
+        txHash: payout.mintTxHash,
+      });
 
     } catch (payoutError) {
       console.error("Payment error:", payoutError);
@@ -210,6 +218,13 @@ export async function POST(
           .eq("id", payment.id)
           .select()
           .single();
+
+      if (paymentUpdateError) {
+        console.error(
+          "Failed to update payment status",
+          paymentUpdateError,
+        );
+      }    
     }
   } catch (error) {
     console.error("Submit task error:", error);
