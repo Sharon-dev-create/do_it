@@ -191,7 +191,9 @@ export async function POST(
             submission,
             payment: confirmedPayment ??{
               ...payment,
-              status: "failed",
+              status: "confirmed",
+              tx_hash: payout.mintTxHash,
+              completed_at: new Date().toISOString(),
             },
           },
           { status: 500 },
