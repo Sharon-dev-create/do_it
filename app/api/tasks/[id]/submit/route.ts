@@ -166,8 +166,7 @@ export async function POST(
         String(task.reward_usdc),
         worker_address as `0x${string}`,
       );
-
-      const { data: failedPayment, error: failedUpdateError } =
+      const { data: confirmedPayment, error: paymentUpdateError } =
         await supabase
           .from("task_payments")
           .update({
@@ -179,33 +178,26 @@ export async function POST(
           .select()
           .single();
 
-      if (failedUpdateError) {
+      if (paymentUpdateError) {
         console.error(
           "Failed to update payment status:",
-          failedUpdateError,
+          paymentUpdateError,
         );
 
         return NextResponse.json(
           {
-            error: "Task completed but payment failed",
+            error: "Task completed but payment record update failed",
             correct: true,
             submission,
-            payment: failedPayment ??{
+            payment: confirmedPayment ??{
               ...payment,
-              status: "confirmed",
+              status: "failed",
             },
           },
           { status: 500 },
         );
       }
 
-      return NextResponse.json({
-        submission,
-        correct: true,
-        message: "Task completed and worker paid successfully",
-        payment: confirmedPayment,
-        txHash: payout.mintTxHash,
-      });
     } catch (payoutError) {
       console.error("Payment error:", payoutError);
 
