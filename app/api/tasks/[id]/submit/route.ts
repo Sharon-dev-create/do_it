@@ -130,7 +130,7 @@ export async function POST(
     //     message: "Incorrect answer",
     //   });
     // }
-    
+
     // 7. Create the pending payment record
     const { data: payment, error: paymentError } = await supabase
       .from("task_payments")
@@ -179,7 +179,7 @@ export async function POST(
 
         return NextResponse.json(
           {
-            error: "Payment was sent but failed to udate record",
+            error: "Payment was sent but failed to update record",
             txHash: payout.mintTxHash,
           },
           { status: 500 },
