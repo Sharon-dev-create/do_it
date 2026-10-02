@@ -224,14 +224,27 @@ export async function POST(
           "Failed to update payment status",
           paymentUpdateError,
         );
-      }    
+      }
+
+      return NextResponse.json(
+        {
+          error: "Task completed but payment failed",
+          correct: true,
+          submission,
+          payment: failedPayment ?? {
+            ...payment,
+            status: "failed",
+          },
+        },
+        { status: 500 },
+      );
     }
   } catch (error) {
     console.error("Submit task error:", error);
 
     return NextResponse.json(
-      { error: "Invalid request" },
-      { status: 400 },
+      { error: "Failed to submit task" },
+      { status: 500 },
     );
   }
 }
