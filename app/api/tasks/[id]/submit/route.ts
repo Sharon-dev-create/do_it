@@ -167,7 +167,7 @@ export async function POST(
         worker_address as `0x${string}`,
       );
 
-      const { data: confirmedPayment, error: paymentUpdateError } =
+      const { data: failedPayment, error: failedUpdateError } =
         await supabase
           .from("task_payments")
           .update({
@@ -179,18 +179,18 @@ export async function POST(
           .select()
           .single();
 
-      if (paymentUpdateError) {
+      if (failedUpdateError) {
         console.error(
-          "Update payment after payout error:",
-          paymentUpdateError,
+          "Failed to update payment status:",
+          failedUpdateError,
         );
 
         return NextResponse.json(
           {
-            error: "Payment was sent but failed to update record",
+            error: "Task completed but payment failed",
             correct: true,
             submission,
-            payment: {
+            payment: failedPayment ??{
               ...payment,
               status: "confirmed",
             },
