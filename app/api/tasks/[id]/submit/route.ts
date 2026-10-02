@@ -51,15 +51,63 @@ export async function POST(
       String(answer).trim().toLowerCase() ===
       String(task.correct_answer).trim().toLowerCase();
 
-    // 4. Record the submission
+    // Wrong answers don't claim the task
+    if (!isCorrect) {
+      const { data: submission, error: submissionError } = await supabase
+        .from("submissions")
+        .insert({
+          task_id: task.id,
+          worker_address,
+          answer: String(answer),
+          is_correct: false,
+          status: "rejected",
+          verified_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (submissionError) {
+        return NextResponse.json(
+          { error: "Failed to record submission" },
+          { status: 500 },
+        );
+      }
+
+      return NextResponse.json({
+        submission,
+        correct: false,
+        message: "Incorrect answer",
+      });
+    }
+
+    // 4. Atomically claim the task
+    const { data: claimedTask, error: claimError } = await supabase
+      .from("tasks")
+      .update({
+        status: "completed",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", task.id)
+      .eq("status", "open")
+      .select()
+      .single();
+
+    if (claimError || !claimedTask) {
+      return NextResponse.json(
+        { error: "Task has already been claimed" },
+        { status: 409 },
+      );
+    }
+
+    // 5. Record the successful submission
     const { data: submission, error: submissionError } = await supabase
       .from("submissions")
       .insert({
         task_id: task.id,
         worker_address,
         answer: String(answer),
-        is_correct: isCorrect,
-        status: isCorrect ? "approved" : "rejected",
+        is_correct: true,
+        status: "approved",
         verified_at: new Date().toISOString(),
       })
       .select()
@@ -74,33 +122,15 @@ export async function POST(
       );
     }
 
-    // 5. If the answer is wrong, stop here
-    if (!isCorrect) {
-      return NextResponse.json({
-        submission,
-        correct: false,
-        message: "Incorrect answer",
-      });
-    }
-
-    // 6. Mark the task as completed
-    const { error: taskUpdateError } = await supabase
-      .from("tasks")
-      .update({
-        status: "completed",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", task.id);
-
-    if (taskUpdateError) {
-      console.error("Update task error:", taskUpdateError);
-
-      return NextResponse.json(
-        { error: "Failed to complete task" },
-        { status: 500 },
-      );
-    }
-
+    // 6. If the answer is wrong, stop here
+    // if (!isCorrect) {
+    //   return NextResponse.json({
+    //     submission,
+    //     correct: false,
+    //     message: "Incorrect answer",
+    //   });
+    // }
+    
     // 7. Create the pending payment record
     const { data: payment, error: paymentError } = await supabase
       .from("task_payments")
@@ -124,62 +154,62 @@ export async function POST(
     }
 
     try {
-        const payout = await payWorker(
-            String(task.reward_usdc),
-            worker_address as `0x${string}`,
+      const payout = await payWorker(
+        String(task.reward_usdc),
+        worker_address as `0x${string}`,
+      );
+
+      const { data: confirmedPayment, error: paymentUpdateError } =
+        await supabase
+          .from("task_payments")
+          .update({
+            status: "confirmed",
+            tx_hash: payout.mintTxHash,
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", payment.id)
+          .select()
+          .single();
+
+      if (paymentUpdateError) {
+        console.error(
+          "Update payment after record error:",
+          paymentUpdateError
         );
 
-        const { data: confirmedPayment, error: paymentUpdateError } =
-          await supabase
-            .from("task_payments")
-            .update({
-              status: "confirmed",
-              tx_hash: payout.mintTxHash,
-              completed_at: new Date().toISOString(),
-            })
-            .eq("id", payment.id)
-            .select()
-            .single();
-
-          if (paymentUpdateError) {
-            console.error(
-                "Update payment after record error:",
-                paymentUpdateError
-            );
-
-            return NextResponse.json(
-                {
-                 error: "Payment was sent but failed to udate record",
-                 txHash: payout.mintTxHash,
-                },
-                { status: 500 },
-            );
-          }
-
-        return NextResponse.json({
-          submission,
-          correct: true,
-          message: "Task completed and worker paid successfully",
-          payment: confirmedPayment,
-          txHash: payout.mintTxHash,
-        });
-    } catch (payoutError) {
-        console.error("Payment error:", payoutError);
-
-        await supabase
-           .from("task_payments")
-           .update({
-                status: "failed",
-        })
-         .eq("id", payment.id);
-
         return NextResponse.json(
-            {
-                error: "Task completed but payment failed",
-                payment,
+          {
+            error: "Payment was sent but failed to udate record",
+            txHash: payout.mintTxHash,
+          },
+          { status: 500 },
+        );
+      }
+
+      return NextResponse.json({
+        submission,
+        correct: true,
+        message: "Task completed and worker paid successfully",
+        payment: confirmedPayment,
+        txHash: payout.mintTxHash,
+      });
+    } catch (payoutError) {
+      console.error("Payment error:", payoutError);
+
+      await supabase
+        .from("task_payments")
+        .update({
+          status: "failed",
+        })
+        .eq("id", payment.id);
+
+      return NextResponse.json(
+        {
+          error: "Task completed but payment failed",
+          payment,
         },
-            { status: 500 },
-        ); 
+        { status: 500 },
+      );
     }
   } catch (error) {
     console.error("Submit task error:", error);
