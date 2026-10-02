@@ -1,10 +1,10 @@
-# Arc Nanopayments Demo
+# do-it
 
 Demonstrate gasless USDC nanopayments using [Circle Nanopayments](https://www.circle.com/nanopayments) on Arc. A **LangChain agent** acts as the buyer, autonomously paying for paywalled resources, while a **Next.js web app** acts as the seller, exposing x402-protected endpoints and providing a seller dashboard to monitor payments and withdraw earnings.
 
 Circle Gateway batches many signed offchain authorizations into a single onchain settlement, enabling economically viable sub-cent payments.
 
-<img alt="Arc Nanopayments Demo dashboard" src="public/screenshot.png" />
+<img alt="do-it dashboard" src="public/screenshot.png" />
 
 ## Table of Contents
 
@@ -28,8 +28,8 @@ Circle Gateway batches many signed offchain authorizations into a single onchain
 1. Clone the repository and install dependencies:
 
    ```bash
-   git clone https://github.com/akelani-circle/arc-nanopayments-demo.git
-   cd arc-nanopayments-demo
+   git clone https://github.com/Sharon-dev-create/do_it.git
+   cd do_it
    npm install
    ```
 

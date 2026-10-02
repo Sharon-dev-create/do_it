@@ -1,4 +1,5 @@
 {
+  "name": "do-it",
   "private": true,
   "scripts": {
     "dev": "next dev",
