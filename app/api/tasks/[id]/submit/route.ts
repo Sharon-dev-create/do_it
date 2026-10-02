@@ -67,6 +67,8 @@ export async function POST(
         .single();
 
       if (submissionError) {
+        console.error("Create rejected submission error:", submissionError);
+
         return NextResponse.json(
           { error: "Failed to record submission" },
           { status: 500 },
@@ -114,7 +116,18 @@ export async function POST(
       .single();
 
     if (submissionError) {
-      console.error("Create submission error:", submissionError);
+      console.error("Create successful submission error:", submissionError);
+
+      // We claimed the task but haven't created a payment.
+      // Reopen it so it isn't permanently stuck.
+      await supabase
+        .from("tasks")
+        .update({
+          status: "open",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", task.id)
+        .eq("status", "completed");
 
       return NextResponse.json(
         { error: "Failed to record submission" },
@@ -122,16 +135,7 @@ export async function POST(
       );
     }
 
-    // 6. If the answer is wrong, stop here
-    // if (!isCorrect) {
-    //   return NextResponse.json({
-    //     submission,
-    //     correct: false,
-    //     message: "Incorrect answer",
-    //   });
-    // }
-
-    // 7. Create the pending payment record
+    // 6. Create the pending payment record
     const { data: payment, error: paymentError } = await supabase
       .from("task_payments")
       .insert({
@@ -148,11 +152,15 @@ export async function POST(
       console.error("Create payment error:", paymentError);
 
       return NextResponse.json(
-        { error: "Failed to create payment record" },
+        {
+          error: "Task completed but payment record could not be created",
+          submission,
+        },
         { status: 500 },
       );
     }
 
+    // 7. Pay the worker
     try {
       const payout = await payWorker(
         String(task.reward_usdc),
@@ -173,8 +181,8 @@ export async function POST(
 
       if (paymentUpdateError) {
         console.error(
-          "Update payment after record error:",
-          paymentUpdateError
+          "Update payment after payout error:",
+          paymentUpdateError,
         );
 
         return NextResponse.json(
