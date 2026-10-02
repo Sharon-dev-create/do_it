@@ -84,6 +84,8 @@ export async function payWorker(
       size: 32,
     });
 
+  const salt = `0x${randomBytes(32).toString("hex")}` as `0x${string}`;
+
   const burnIntent = {
     maxBlockHeight: maxUint256,
     maxFee,
@@ -100,8 +102,8 @@ export async function payWorker(
       sourceSigner: addressToBytes32(gateway.address),
       destinationCaller: addressToBytes32(zeroAddress),
       value: withdrawAmount,
-      salt: `0x${randomBytes(32).toString("hex")}`,
-      hookData: "0x",
+      salt,
+      hookData: "0x" as `0x${string}`,
     },
   };
 
@@ -118,8 +120,8 @@ export async function payWorker(
       TransferSpec: [
         { name: "version", type: "uint32" },
         { name: "sourceDomain", type: "uint32" },
-        { name: "sourceContract", type: "bytes32" },
         { name: "destinationDomain", type: "uint32" },
+        { name: "sourceContract", type: "bytes32" },
         { name: "destinationContract", type: "bytes32" },
         { name: "sourceToken", type: "bytes32" },
         { name: "destinationToken", type: "bytes32" },
@@ -166,13 +168,37 @@ export async function payWorker(
     !result.signature
   ) {
     throw new Error(
-      `Gateway transfer failed: ${
-        result.message ||
-        result.error ||
-        JSON.stringify(result)
+      `Gateway transfer failed: ${result.message ||
+      result.error ||
+      JSON.stringify(result)
       }`,
     );
   }
+
+  const nonceResponse = await fetch(process.env.ARC_RPC_URL!, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "eth_getTransactionCount",
+      params: [gateway.account.address, "pending"],
+      id: 1,
+    }),
+  });
+
+  const nonceData = await nonceResponse.json();
+
+  if (!nonceResponse.ok || nonceData.error) {
+    throw new Error(
+      `Failed to get transaction nonce: ${JSON.stringify(nonceData)}`,
+    );
+  }
+
+  const nonce = Number.parseInt(nonceData.result, 16);
+
+  console.log("Using transaction nonce:", nonce);
 
   const mintTxHash = await gateway.walletClient.writeContract({
     address: config.gatewayMinter,
@@ -196,6 +222,8 @@ export async function payWorker(
     ],
     functionName: "gatewayMint",
     args: [result.attestation, result.signature],
+    nonce,
+    gasPrice: 25_000_000_000n,
   });
 
   await gateway.publicClient.waitForTransactionReceipt({
