@@ -190,7 +190,10 @@ export async function POST(
             error: "Payment was sent but failed to update record",
             correct: true,
             submission,
-            txHash: payout.mintTxHash,
+            payment: {
+              ...payment,
+              status: "confirmed",
+            },
           },
           { status: 500 },
         );
@@ -206,20 +209,15 @@ export async function POST(
     } catch (payoutError) {
       console.error("Payment error:", payoutError);
 
-      await supabase
-        .from("task_payments")
-        .update({
-          status: "failed",
-        })
-        .eq("id", payment.id);
-
-      return NextResponse.json(
-        {
-          error: "Task completed but payment failed",
-          payment,
-        },
-        { status: 500 },
-      );
+      const { data: failedPayment, error: paymentUpdateError } =
+        await supabase
+          .from("task_payments")
+          .update({
+            status: "failed",
+          })
+          .eq("id", payment.id)
+          .select()
+          .single();
     }
   } catch (error) {
     console.error("Submit task error:", error);
