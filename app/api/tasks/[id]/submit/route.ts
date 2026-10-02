@@ -188,6 +188,8 @@ export async function POST(
         return NextResponse.json(
           {
             error: "Payment was sent but failed to update record",
+            correct: true,
+            submission,
             txHash: payout.mintTxHash,
           },
           { status: 500 },
