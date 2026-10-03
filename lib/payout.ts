@@ -172,10 +172,9 @@ export async function payWorker(
     !result.signature
   ) {
     throw new Error(
-      `Gateway transfer failed: ${
-        result.message ||
-        result.error ||
-        JSON.stringify(result)
+      `Gateway transfer failed: ${result.message ||
+      result.error ||
+      JSON.stringify(result)
       }`,
     );
   }
@@ -259,15 +258,42 @@ export async function payWorker(
   }
 
   // Wait for on-chain confirmation.
-  const receipt =
-    await gateway.publicClient.waitForTransactionReceipt({
-      hash: mintTxHash,
+  try {
+    const receipt =
+      await gateway.publicClient.waitForTransactionReceipt({
+        hash: mintTxHash,
+      });
+
+    if (receipt.status !== "success") {
+      const error = new Error(
+        `Gateway mint transaction failed: ${mintTxHash}`,
+      );
+
+      Object.assign(error, {
+        txHash: mintTxHash,
+      });
+
+      throw error;
+    }
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "txHash" in error
+    ) {
+      throw error;
+    }
+
+    const confirmationError = new Error(
+      "Gateway mint transaction was broadcast but confirmation failed",
+    );
+
+    Object.assign(confirmationError, {
+      txHash: mintTxHash,
+      cause: error,
     });
 
-  if (receipt.status !== "success") {
-    throw new Error(
-      `Gateway mint transaction failed: ${mintTxHash}`,
-    );
+    throw confirmationError;
   }
 
   return {

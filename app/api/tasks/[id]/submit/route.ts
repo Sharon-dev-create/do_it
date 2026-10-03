@@ -243,9 +243,59 @@ export async function POST(
         txHash: payout.mintTxHash,
       });
 
-    } catch (payoutError) {
+    }    catch (payoutError) {
       console.error("Payment error:", payoutError);
 
+      const txHash =
+        payoutError &&
+        typeof payoutError === "object" &&
+        "txHash" in payoutError &&
+        typeof payoutError.txHash === "string"
+          ? payoutError.txHash
+          : null;
+
+      // A transaction hash means the payout was already broadcast.
+      // Never mark it as failed because that could allow a double payment.
+      if (txHash) {
+        const { data: submittedPayment, error: submittedError } =
+          await supabase
+            .from("task_payments")
+            .update({
+              status: "submitted",
+              tx_hash: txHash,
+            })
+            .eq("id", payment.id)
+            .eq("status", "pending")
+            .select()
+            .single();
+
+        if (submittedError) {
+          console.error(
+            "Failed to save submitted payment:",
+            submittedError,
+          );
+        }
+
+        return NextResponse.json(
+          {
+            error:
+              "Payment transaction was submitted but confirmation is unresolved",
+            correct: true,
+            submission,
+            payment: submittedPayment ?? {
+              ...payment,
+              status: "submitted",
+              tx_hash: txHash,
+            },
+            txHash,
+            requiresReconciliation: true,
+          },
+          { status: 500 },
+        );
+      }
+
+      // No transaction hash means the payout was never broadcast.
+      // This is safe to classify as failed and retry later.
       const { data: failedPayment, error: paymentUpdateError } =
         await supabase
           .from("task_payments")
@@ -253,12 +303,13 @@ export async function POST(
             status: "failed",
           })
           .eq("id", payment.id)
+          .eq("status", "pending")
           .select()
           .single();
 
       if (paymentUpdateError) {
         console.error(
-          "Failed to update payment status",
+          "Failed to update payment status:",
           paymentUpdateError,
         );
       }

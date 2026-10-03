@@ -19,7 +19,6 @@
 import type { Metadata } from "next";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
-// @ts-expect-error - CSS side-effect imports are handled by the Next.js bundler.
 import "./globals.css";
 
 const defaultUrl = process.env.VERCEL_URL
