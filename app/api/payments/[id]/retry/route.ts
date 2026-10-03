@@ -91,10 +91,10 @@ export async function POST(
       // 6. Mark payment confirmed
       const { data: confirmedPayment, error: confirmError } =
         await supabase
-          .from("task_payments")
-          .update({
-            status: "confirmed",
-            tx_hash: payout.mintTxHash,
+            .from("task_payments")
+            .update({
+                status: "confirmed",
+                tx_hash: payout.mintTxHash,
             completed_at: new Date().toISOString(),
           })
           .eq("id", payment.id)

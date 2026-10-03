@@ -253,7 +253,9 @@ export async function payWorker(
       );
     }
 
-    
+     return { mintTxHash };
+
+
             type: "bytes",
           },
           {

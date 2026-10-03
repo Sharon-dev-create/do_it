@@ -183,9 +183,23 @@ export async function POST(
     // 7. Pay the worker
     try {
       const payout = await payWorker(
-        String(task.reward_usdc),
-        worker_address as `0x${string}`,
-      );
+  String(task.reward_usdc),
+  worker_address as `0x${string}`,
+  async (txHash) => {
+    const { error } = await supabase
+      .from("task_payments")
+      .update({
+        status: "submitted",
+        tx_hash: txHash,
+      })
+      .eq("id", payment.id)
+      .eq("status", "pending");
+
+    if (error) {
+      throw error;
+    }
+  },
+);
       const { data: confirmedPayment, error: paymentUpdateError } =
         await supabase
           .from("task_payments")
