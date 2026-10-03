@@ -163,43 +163,43 @@ export async function POST(
         .eq("id", task.id)
         .eq("status", "completed");
 
-        if (reopenError) {
-           console.error(
-            "Failed to open task after payment creation error:",
-            reopenError,
-           );
-        }
-
-        return NextResponse.json(
-          {
-            error: "Failed to create payment record",
-            submission,
-            taskReopened: !reopenError,
-          },
-          { status: 500 },
+      if (reopenError) {
+        console.error(
+          "Failed to open task after payment creation error:",
+          reopenError,
         );
+      }
+
+      return NextResponse.json(
+        {
+          error: "Failed to create payment record",
+          submission,
+          taskReopened: !reopenError,
+        },
+        { status: 500 },
+      );
     }
 
     // 7. Pay the worker
     try {
       const payout = await payWorker(
-  String(task.reward_usdc),
-  worker_address as `0x${string}`,
-  async (txHash) => {
-    const { error } = await supabase
-      .from("task_payments")
-      .update({
-        status: "submitted",
-        tx_hash: txHash,
-      })
-      .eq("id", payment.id)
-      .eq("status", "pending");
+        String(task.reward_usdc),
+        worker_address as `0x${string}`,
+        async (txHash) => {
+          const { error } = await supabase
+            .from("task_payments")
+            .update({
+              status: "submitted",
+              tx_hash: txHash,
+            })
+            .eq("id", payment.id)
+            .eq("status", "pending");
 
-    if (error) {
-      throw error;
-    }
-  },
-);
+          if (error) {
+            throw error;
+          }
+        },
+      );
       const { data: confirmedPayment, error: paymentUpdateError } =
         await supabase
           .from("task_payments")
@@ -209,6 +209,7 @@ export async function POST(
             completed_at: new Date().toISOString(),
           })
           .eq("id", payment.id)
+          .eq("status", "submitted")
           .select()
           .single();
 
@@ -223,7 +224,7 @@ export async function POST(
             error: "Payment succeeded but payment record update failed",
             correct: true,
             submission,
-            payment: confirmedPayment ??{
+            payment: confirmedPayment ?? {
               ...payment,
               status: "confirmed",
               tx_hash: payout.mintTxHash,

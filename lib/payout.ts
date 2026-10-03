@@ -34,8 +34,8 @@ export async function payWorker(
 
   // Check only the Gateway balance.
   // We deliberately avoid gateway.withdraw(), because its
-  // getBalances() also performs an unnecessary on-chain
-  // USDC balanceOf() call that is timing out on Arc RPC.
+  // getBalances() also performs an on-chain USDC balanceOf()
+  // call that is timing out on Arc RPC.
 
   const balanceResponse = await fetch(
     "https://gateway-api-testnet.circle.com/v1/balances",
@@ -85,7 +85,8 @@ export async function payWorker(
       size: 32,
     });
 
-  const salt = `0x${randomBytes(32).toString("hex")}` as `0x${string}`;
+  const salt =
+    `0x${randomBytes(32).toString("hex")}` as `0x${string}`;
 
   const burnIntent = {
     maxBlockHeight: maxUint256,
@@ -154,7 +155,9 @@ export async function payWorker(
       body: JSON.stringify(
         [{ burnIntent, signature }],
         (_, value) =>
-          typeof value === "bigint" ? value.toString() : value,
+          typeof value === "bigint"
+            ? value.toString()
+            : value,
       ),
     },
   );
@@ -169,25 +172,30 @@ export async function payWorker(
     !result.signature
   ) {
     throw new Error(
-      `Gateway transfer failed: ${result.message ||
-      result.error ||
-      JSON.stringify(result)
+      `Gateway transfer failed: ${
+        result.message ||
+        result.error ||
+        JSON.stringify(result)
       }`,
     );
   }
 
-  const nonceResponse = await fetch(process.env.ARC_RPC_URL!, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+  // Get the next transaction nonce directly from Arc RPC.
+  const nonceResponse = await fetch(
+    process.env.ARC_RPC_URL!,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "eth_getTransactionCount",
+        params: [gateway.account.address, "pending"],
+        id: 1,
+      }),
     },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      method: "eth_getTransactionCount",
-      params: [gateway.account.address, "pending"],
-      id: 1,
-    }),
-  });
+  );
 
   const nonceData = await nonceResponse.json();
 
@@ -201,6 +209,7 @@ export async function payWorker(
 
   console.log("Using transaction nonce:", nonce);
 
+  // Broadcast the gateway mint transaction.
   const mintTxHash = await gateway.walletClient.writeContract({
     address: config.gatewayMinter,
     abi: [
@@ -210,52 +219,7 @@ export async function payWorker(
         stateMutability: "nonpayable",
         inputs: [
           {
-            { name: "attestationPayload", type: "bytes" },
-            { name: "signature", type: "bytes" },
-          ],
-        ],
-        outputs: [],
-      },
-    ], 
-      functionName: "gatewayMint",
-      args: [result.attestation, result.signature],
-      nonce,
-      gasPrice: 25_000_000_000n,
-    });
-
-    // The transaction has now been broadcast.
-    // PErsist the hash before waiting for confirmation
-     if (onSubmitted) {
-      try {
-        await onSubmitted(mintTxHash);
-      } catch (error) {
-        const submittedError = new Error(
-        "Transaction was broadcast but failed to persist submitted state", 
-      );
-
-      Object.assign(submittedError, {
-        txHash: mintTxHash,
-        cause: error ,
-      });
-
-      throw submittedError;
-      }
-    }
-
-    // Now wait for the on-chain transaction to be mined and confirmed.
-    const receipt = await gateway.publicClient.waitForTransactionReceipt({
-      hash: mintTxHash,
-    });
-
-    if (receipt.status !== "success") {
-      throw new Error(
-        `Gateway mint trasaction failed: ${mintTxHash}`,
-      );
-    }
-
-     return { mintTxHash };
-
-
+            name: "attestationPayload",
             type: "bytes",
           },
           {
@@ -272,9 +236,39 @@ export async function payWorker(
     gasPrice: 25_000_000_000n,
   });
 
-  await gateway.publicClient.waitForTransactionReceipt({
-    hash: mintTxHash,
-  });
+  console.log("Gateway mint transaction broadcast:", mintTxHash);
+
+  // IMPORTANT:
+  // The transaction now exists on the network.
+  // Persist the hash before waiting for confirmation.
+  if (onSubmitted) {
+    try {
+      await onSubmitted(mintTxHash);
+    } catch (error) {
+      const submissionError = new Error(
+        "Transaction was broadcast but failed to persist submitted state",
+      );
+
+      Object.assign(submissionError, {
+        txHash: mintTxHash,
+        cause: error,
+      });
+
+      throw submissionError;
+    }
+  }
+
+  // Wait for on-chain confirmation.
+  const receipt =
+    await gateway.publicClient.waitForTransactionReceipt({
+      hash: mintTxHash,
+    });
+
+  if (receipt.status !== "success") {
+    throw new Error(
+      `Gateway mint transaction failed: ${mintTxHash}`,
+    );
+  }
 
   return {
     mintTxHash,
