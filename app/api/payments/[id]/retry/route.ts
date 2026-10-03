@@ -28,7 +28,9 @@ export async function POST(
       );
     }
 
-    // 2. Only failed payments can be retried
+    // 2. Only failed payments can be retried.
+    // submitted payments may already have been broadcast and
+    // must be reconciled instead of being paid again.
     if (payment.status !== "failed") {
       return NextResponse.json(
         {
@@ -61,7 +63,7 @@ export async function POST(
       );
     }
 
-    // 4. Mark payment as pending before attempting payout
+    // 4. Atomically claim the failed payment for retry.
     const { data: retryPayment, error: retryError } = await supabase
       .from("task_payments")
       .update({
@@ -75,30 +77,46 @@ export async function POST(
     if (retryError || !retryPayment) {
       return NextResponse.json(
         {
-          error: "Payment is already being retried or could not be updated",
+          error:
+            "Payment is already being retried or could not be updated",
         },
         { status: 409 },
       );
     }
 
-    // 5. Retry the actual payout
+    // 5. Retry the payout
     try {
       const payout = await payWorker(
         String(payment.amount_usdc),
         payment.worker_address as `0x${string}`,
-      );
-
-      // 6. Mark payment confirmed
-      const { data: confirmedPayment, error: confirmError } =
-        await supabase
+        async (txHash) => {
+          const { error } = await supabase
             .from("task_payments")
             .update({
-                status: "confirmed",
-                tx_hash: payout.mintTxHash,
+              status: "submitted",
+              tx_hash: txHash,
+            })
+            .eq("id", payment.id)
+            .eq("status", "pending");
+
+          if (error) {
+            throw error;
+          }
+        },
+      );
+
+      // 6. The transaction is confirmed on-chain.
+      // Only submitted -> confirmed is allowed here.
+      const { data: confirmedPayment, error: confirmError } =
+        await supabase
+          .from("task_payments")
+          .update({
+            status: "confirmed",
+            tx_hash: payout.mintTxHash,
             completed_at: new Date().toISOString(),
           })
           .eq("id", payment.id)
-          .eq("status", "pending")
+          .eq("status", "submitted")
           .select()
           .single();
 
@@ -110,13 +128,15 @@ export async function POST(
 
         return NextResponse.json(
           {
-            error: "Payment succeeded but failed to update payment record",
+            error:
+              "Payment succeeded but payment record update failed",
             payment: {
               ...retryPayment,
-              status: "confirmed",
+              status: "submitted",
               tx_hash: payout.mintTxHash,
             },
             txHash: payout.mintTxHash,
+            requiresReconciliation: true,
           },
           { status: 500 },
         );
@@ -130,7 +150,54 @@ export async function POST(
     } catch (payoutError) {
       console.error("Payment retry failed:", payoutError);
 
-      // Return the payment to failed so it can be retried again later.
+      // If a transaction hash exists, the transaction was already
+      // broadcast. NEVER turn that payment into "failed".
+      const txHash =
+        payoutError &&
+        typeof payoutError === "object" &&
+        "txHash" in payoutError &&
+        typeof payoutError.txHash === "string"
+          ? payoutError.txHash
+          : null;
+
+      if (txHash) {
+        const { data: submittedPayment, error: submittedError } =
+          await supabase
+            .from("task_payments")
+            .update({
+              status: "submitted",
+              tx_hash: txHash,
+            })
+            .eq("id", payment.id)
+            .eq("status", "pending")
+            .select()
+            .single();
+
+        if (submittedError) {
+          console.error(
+            "Failed to save submitted payment:",
+            submittedError,
+          );
+        }
+
+        return NextResponse.json(
+          {
+            error:
+              "Payment transaction was submitted but confirmation is unresolved",
+            payment: submittedPayment ?? {
+              ...retryPayment,
+              status: "submitted",
+              tx_hash: txHash,
+            },
+            txHash,
+            requiresReconciliation: true,
+          },
+          { status: 500 },
+        );
+      }
+
+      // No transaction hash means the payout was not broadcast.
+      // This is safe to retry later.
       const { data: failedPayment, error: failedUpdateError } =
         await supabase
           .from("task_payments")
