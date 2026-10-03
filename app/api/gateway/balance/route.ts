@@ -19,7 +19,6 @@
 import { NextResponse } from "next/server";
 import { createPublicClient, http, formatUnits, erc20Abi } from "viem";
 
-export const dynamic = "force-dynamic";
 
 const GATEWAY_API = "https://gateway-api-testnet.circle.com/v1/balances";
 const ARC_TESTNET_DOMAIN = 26;
