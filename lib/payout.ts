@@ -13,6 +13,7 @@ import {
 export async function payWorker(
   amount: string,
   workerAddress: `0x${string}`,
+  onSubmitted?: (txHash: `0x${string}`) => Promise<void>,
 ) {
   const privateKey = process.env.SELLER_PRIVATE_KEY;
 
@@ -209,7 +210,50 @@ export async function payWorker(
         stateMutability: "nonpayable",
         inputs: [
           {
-            name: "attestationPayload",
+            { name: "attestationPayload", type: "bytes" },
+            { name: "signature", type: "bytes" },
+          ],
+        ],
+        outputs: [],
+      },
+    ], 
+      functionName: "gatewayMint",
+      args: [result.attestation, result.signature],
+      nonce,
+      gasPrice: 25_000_000_000n,
+    });
+
+    // The transaction has now been broadcast.
+    // PErsist the hash before waiting for confirmation
+     if (onSubmitted) {
+      try {
+        await onSubmitted(mintTxHash);
+      } catch (error) {
+        const submittedError = new Error(
+        "Transaction was broadcast but failed to persist submitted state", 
+      );
+
+      Object.assign(submittedError, {
+        txHash: mintTxHash,
+        cause: error ,
+      });
+
+      throw submittedError;
+      }
+    }
+
+    // Now wait for the on-chain transaction to be mined and confirmed.
+    const receipt = await gateway.publicClient.waitForTransactionReceipt({
+      hash: mintTxHash,
+    });
+
+    if (receipt.status !== "success") {
+      throw new Error(
+        `Gateway mint trasaction failed: ${mintTxHash}`,
+      );
+    }
+
+    
             type: "bytes",
           },
           {
