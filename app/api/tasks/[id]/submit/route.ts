@@ -151,13 +151,24 @@ export async function POST(
     if (paymentError) {
       console.error("Create payment error:", paymentError);
 
-      return NextResponse.json(
-        {
-          error: "Task completed but payment record could not be created",
-          submission,
-        },
-        { status: 500 },
-      );
+      // The task was claimed and the submission was recorded
+      // but no paymnent record was created
+      // NOthing has been paid yet, so reopen the task.
+      const { error: reopenError } = await supabase
+        .from("tasks")
+        .update({
+          status: "open",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", task.id)
+        .eq("status", "completed");
+
+        if (reopenError) {
+           console.error(
+            "Failed to open task after payment creation error:",
+            reopenError,
+           );
+        }
     }
 
     // 7. Pay the worker
