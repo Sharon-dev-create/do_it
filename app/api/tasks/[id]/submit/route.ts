@@ -169,6 +169,15 @@ export async function POST(
             reopenError,
            );
         }
+
+        return NextResponse.json(
+          {
+            error: "Failed to create payment record",
+            submission,
+            taskReopened: !reopenError,
+          },
+          { status: 500 },
+        );
     }
 
     // 7. Pay the worker
