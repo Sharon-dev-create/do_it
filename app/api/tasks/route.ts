@@ -71,7 +71,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("tasks")
       .select(
-        "id, title, description, reward_usdc, created_by, status, created_at"
+        "id, title, description, reward_usdc, created_by, status, created_at, updated_at"
       )
       .eq("status", "open")
       .order("created_at", { ascending: false });
