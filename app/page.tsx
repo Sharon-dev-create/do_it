@@ -71,6 +71,7 @@ export default function Home() {
 
   const settledToday = useMemo(() => events.filter((event) => new Date(event.created_at).toDateString() === new Date().toDateString()).reduce((total, event) => total + Number(event.amount_usdc || 0), 0), [events]);
   const latestTasks = tasks.slice(0, 4);
+  const featuredTask = tasks[0];
 
   return (
     <main className="doit-shell">
@@ -93,7 +94,7 @@ export default function Home() {
         <article className="orbit-card" id="network">
           <div className="orbit-meta"><span className="eyebrow">NETWORK / ROUTE MAP</span><span className="eyebrow mono">01 — 04</span></div>
           <OrbitalDiagram />
-          <div className="mission-caption"><div><span className="eyebrow">FEATURED ROUTE</span><h2>Task <span className="mono">84291</span></h2></div><p><i /> In transit <span>·</span> Task, Verification, Arc, Worker <span>·</span> <b className="mono">0.004 USDC</b></p></div>
+          <div className="mission-caption"><div><span className="eyebrow">FEATURED ROUTE</span><h2>{featuredTask ? <>Task <span className="mono">{featuredTask.id.slice(0, 8).toUpperCase()}</span></> : tasksLoading ? "Syncing missions" : "Awaiting mission"}</h2></div><p><i /> {featuredTask ? "Open" : tasksLoading ? "Connecting" : "No active route"} <span>·</span> Task, Verification, Arc, Worker <span>·</span> <b className="mono">{featuredTask ? `${Number(featuredTask.reward_usdc).toFixed(3)} USDC` : "— USDC"}</b></p></div>
         </article>
         <aside className="metrics-column">
           <article className="settled-panel"><span className="eyebrow">SETTLED TODAY <span className="live-dot" /></span><p className="settled-amount">{settledToday.toFixed(2)}<small>USDC</small></p><span className="settled-note">Recorded payments · Arc Testnet</span></article>
