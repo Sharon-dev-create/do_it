@@ -169,7 +169,7 @@ export async function POST(
       );
     }
 
-    return NextResponse.json({
+    return NextResponse.json({ 
       payment: confirmedPayment,
       txHash,
       status: "confirmed",
