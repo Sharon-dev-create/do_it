@@ -213,6 +213,12 @@ export async function payWorker(
   });
 
   const result = await transferResponse.json();
+
+  console.info(
+    "PAYOUT: Circle transfer result",
+    JSON.stringify(result, null, 2),
+  );
+
   console.info("PAYOUT: Circle transfer response parsed");
 
   if (
