@@ -22,7 +22,7 @@ export async function payWorker(
   }
 
   console.info("PAYOUT: worker address validated", { workerAddress });
-  
+
   const privateKey = process.env.SELLER_PRIVATE_KEY;
 
   if (!privateKey) {
@@ -93,8 +93,15 @@ export async function payWorker(
     );
   }
 
-  const addressToBytes32 = (address: `0x${string}`) =>
-    `0x${address.slice(2).padStart(64, "0")}` as `0x${string}`;
+  const addressToBytes32 = (address: `0x${string}`) => {
+    const hex = address.slice(2);
+
+    if (hex.length !==4 0) {
+      throw new Error(`
+        Invalid address length: expected 40 hex characters, got ${hex.length}`
+      );
+    }
+  };
 
   const salt =
     `0x${randomBytes(32).toString("hex")}` as `0x${string}`;
