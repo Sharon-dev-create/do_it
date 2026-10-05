@@ -145,6 +145,16 @@ export async function payWorker(
     },
   };
 
+  console.info(
+    "PAYOUT: burnIntent destinationRecipient",
+    burnIntent.spec.destinationRecipient,
+  );
+
+  console.info(
+    "PAYOUT: burnIntent destinationRecipient length",
+    burnIntent.spec.destinationRecipient.length,
+  )
+
   const signature = await gateway.account.signTypedData({
     domain: {
       name: "GatewayWallet",
