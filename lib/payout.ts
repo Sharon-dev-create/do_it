@@ -87,9 +87,7 @@ export async function payWorker(
   }
 
   const addressToBytes32 = (address: `0x${string}`) =>
-    pad(address.toLowerCase() as `0x${string}`, {
-      size: 32,
-    });
+`0x${address.slice(2).padStart(64, "0")}` as `0x${string}`;
 
   const salt =
     `0x${randomBytes(32).toString("hex")}` as `0x${string}`;
