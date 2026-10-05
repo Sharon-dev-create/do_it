@@ -13,6 +13,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+    console.info("SUBMIT API: request entered", { taskId: id });
     const body = await request.json();
 
     const { worker_address, answer } = body;
@@ -25,6 +26,7 @@ export async function POST(
     }
 
     // 1. Find the task
+    console.info("SUBMIT API: looking up task", { taskId: id });
     const { data: task, error: taskError } = await supabase
       .from("tasks")
       .select("*")
@@ -37,6 +39,7 @@ export async function POST(
         { status: 404 },
       );
     }
+    console.info("SUBMIT API: task loaded", { status: task.status });
 
     // 2. Make sure the task is still available
     if (task.status !== "open") {
@@ -83,6 +86,7 @@ export async function POST(
     }
 
     // 4. Atomically claim the task
+    console.info("SUBMIT API: claiming task", { taskId: task.id });
     const { data: claimedTask, error: claimError } = await supabase
       .from("tasks")
       .update({
@@ -100,6 +104,7 @@ export async function POST(
         { status: 409 },
       );
     }
+    console.info("SUBMIT API: task claimed", { taskId: task.id });
 
     // 5. Record the successful submission
     const { data: submission, error: submissionError } = await supabase
@@ -134,6 +139,9 @@ export async function POST(
         { status: 500 },
       );
     }
+    console.info("SUBMIT API: successful submission recorded", {
+      submissionId: submission.id,
+    });
 
     // 6. Create the pending payment record
     const { data: payment, error: paymentError } = await supabase
@@ -179,9 +187,11 @@ export async function POST(
         { status: 500 },
       );
     }
+    console.info("SUBMIT API: payment record created", { paymentId: payment.id });
 
     // 7. Pay the worker
     try {
+      console.info("SUBMIT API: calling payWorker", { paymentId: payment.id });
       const payout = await payWorker(
         String(task.reward_usdc),
         worker_address as `0x${string}`,
@@ -200,6 +210,8 @@ export async function POST(
           }
         },
       );
+      console.info("SUBMIT API: payWorker returned", { paymentId: payment.id });
+      console.info("SUBMIT API: recording confirmed payment", { paymentId: payment.id });
       const { data: confirmedPayment, error: paymentUpdateError } =
         await supabase
           .from("task_payments")

@@ -70,6 +70,7 @@ export default function TaskDetailPage() {
     setResult(null);
 
     try {
+      console.info("SUBMIT: sending request", { taskId: id });
       const response = await fetch(`/api/tasks/${id}/submit`, {
         method: "POST",
         headers: {
@@ -80,8 +81,14 @@ export default function TaskDetailPage() {
           answer: answer.trim(),
         }),
       });
+      console.info("SUBMIT: response received", { status: response.status });
 
       const data = await response.json();
+      console.info("SUBMIT: response parsed", {
+        correct: data.correct,
+        hasError: Boolean(data.error),
+        hasTxHash: Boolean(data.txHash),
+      });
 
       if (!response.ok) {
         setResult({
@@ -105,6 +112,7 @@ export default function TaskDetailPage() {
       });
     } finally {
       setSubmitting(false);
+      console.info("SUBMIT: request finished");
     }
   }
 

@@ -15,6 +15,7 @@ export async function payWorker(
   workerAddress: `0x${string}`,
   onSubmitted?: (txHash: `0x${string}`) => Promise<void>,
 ) {
+  console.info("PAYOUT: started");
   const privateKey = process.env.SELLER_PRIVATE_KEY;
 
   if (!privateKey) {
@@ -37,6 +38,7 @@ export async function payWorker(
   // getBalances() also performs an on-chain USDC balanceOf()
   // call that is timing out on Arc RPC.
 
+  console.info("PAYOUT: requesting Gateway balance");
   const balanceResponse = await fetch(
     "https://gateway-api-testnet.circle.com/v1/balances",
     {
@@ -55,8 +57,12 @@ export async function payWorker(
       }),
     },
   );
+  console.info("PAYOUT: Gateway balance response received", {
+    status: balanceResponse.status,
+  });
 
   const balanceData = await balanceResponse.json();
+  console.info("PAYOUT: Gateway balance response parsed");
 
   if (!balanceResponse.ok || !balanceData.balances?.length) {
     throw new Error(
@@ -145,6 +151,7 @@ export async function payWorker(
     message: burnIntent,
   });
 
+  console.info("PAYOUT: requesting Circle transfer attestation");
   const transferResponse = await fetch(
     "https://gateway-api-testnet.circle.com/v1/transfer",
     {
@@ -161,8 +168,12 @@ export async function payWorker(
       ),
     },
   );
+  console.info("PAYOUT: Circle transfer response received", {
+    status: transferResponse.status,
+  });
 
   const result = await transferResponse.json();
+  console.info("PAYOUT: Circle transfer response parsed");
 
   if (
     !transferResponse.ok ||
@@ -180,6 +191,7 @@ export async function payWorker(
   }
 
   // Get the next transaction nonce directly from Arc RPC.
+  console.info("PAYOUT: requesting Arc transaction nonce");
   const nonceResponse = await fetch(
     process.env.ARC_RPC_URL!,
     {
@@ -195,8 +207,12 @@ export async function payWorker(
       }),
     },
   );
+  console.info("PAYOUT: Arc nonce response received", {
+    status: nonceResponse.status,
+  });
 
   const nonceData = await nonceResponse.json();
+  console.info("PAYOUT: Arc nonce response parsed");
 
   if (!nonceResponse.ok || nonceData.error) {
     throw new Error(
@@ -209,6 +225,7 @@ export async function payWorker(
   console.log("Using transaction nonce:", nonce);
 
   // Broadcast the gateway mint transaction.
+  console.info("PAYOUT: broadcasting gatewayMint transaction");
   const mintTxHash = await gateway.walletClient.writeContract({
     address: config.gatewayMinter,
     abi: [
@@ -235,14 +252,16 @@ export async function payWorker(
     gasPrice: 25_000_000_000n,
   });
 
-  console.log("Gateway mint transaction broadcast:", mintTxHash);
+  console.info("PAYOUT: gatewayMint transaction broadcast", { mintTxHash });
 
   // IMPORTANT:
   // The transaction now exists on the network.
   // Persist the hash before waiting for confirmation.
   if (onSubmitted) {
     try {
+      console.info("PAYOUT: persisting submitted transaction");
       await onSubmitted(mintTxHash);
+      console.info("PAYOUT: submitted transaction persisted");
     } catch (error) {
       const submissionError = new Error(
         "Transaction was broadcast but failed to persist submitted state",
@@ -259,10 +278,15 @@ export async function payWorker(
 
   // Wait for on-chain confirmation.
   try {
+    console.info("PAYOUT: waiting for Arc transaction receipt", { mintTxHash });
     const receipt =
       await gateway.publicClient.waitForTransactionReceipt({
         hash: mintTxHash,
       });
+    console.info("PAYOUT: Arc transaction receipt received", {
+      status: receipt.status,
+      mintTxHash,
+    });
 
     if (receipt.status !== "success") {
       const error = new Error(
