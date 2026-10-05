@@ -1,145 +1,108 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 
 type Task = {
   id: string;
   title: string;
   description: string;
-  reward_usdc: string | number;
+  reward_usdc: number | string;
   created_by: string;
   status: string;
   created_at: string;
 };
 
 type SubmitResult = {
-  error?: string;
   correct?: boolean;
   message?: string;
+  error?: string;
   txHash?: string;
-  payment?: {
-    status?: string;
-    tx_hash?: string | null;
-    amount_usdc?: string | number;
-  };
 };
 
-type Props = {
-  params: Promise<{ id: string }>;
-};
+export default function TaskDetailPage() {
+  const params = useParams<{ id: string }>();
+  const id = params.id;
 
-export default function TaskDetailPage({ params }: Props) {
-  const [taskId, setTaskId] = useState("");
   const [task, setTask] = useState<Task | null>(null);
-
-  const [walletAddress, setWalletAddress] = useState("");
-  const [answer, setAnswer] = useState("");
-
   const [loading, setLoading] = useState(true);
+  const [answer, setAnswer] = useState("");
+  const [workerAddress, setWorkerAddress] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
   const [result, setResult] = useState<SubmitResult | null>(null);
 
   useEffect(() => {
-    params.then(({ id }) => {
-      setTaskId(id);
+    if (!id) return;
 
-      const savedWallet = window.localStorage.getItem("do-it-worker-address");
-      if (savedWallet) {
-        setWalletAddress(savedWallet);
+    async function loadTask() {
+      try {
+        const response = await fetch(`/api/tasks/${id}`);
+
+        if (!response.ok) {
+          throw new Error("Task not found");
+        }
+
+        const data = await response.json();
+        setTask(data.task);
+      } catch (error) {
+        console.error("Failed to load task:", error);
+      } finally {
+        setLoading(false);
       }
+    }
 
-      fetch(`/api/tasks/${id}`)
-        .then(async (response) => {
-          const payload = await response.json();
-
-          if (!response.ok) {
-            throw new Error(payload.error || "Unable to load mission.");
-          }
-
-          return payload as { task: Task };
-        })
-        .then((payload) => {
-          setTask(payload.task);
-        })
-        .catch((reason: unknown) => {
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "Unable to load mission.",
-          );
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    });
-  }, [params]);
+    loadTask();
+  }, [id]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    setError("");
-    setResult(null);
-
-    if (!/^0x[0-9a-fA-F]{40}$/.test(walletAddress.trim())) {
-      setError("Enter a valid Arc wallet address.");
-      return;
-    }
-
-    if (!answer.trim()) {
-      setError("Enter an answer before submitting.");
-      return;
-    }
-
-    if (!task) {
-      setError("Mission data is unavailable.");
+    if (!workerAddress.trim() || !answer.trim()) {
+      setResult({
+        error: "Enter your wallet address and answer.",
+      });
       return;
     }
 
     setSubmitting(true);
+    setResult(null);
 
     try {
-      window.localStorage.setItem(
-        "do-it-worker-address",
-        walletAddress.trim(),
-      );
-
-      const response = await fetch(`/api/tasks/${taskId}/submit`, {
+      const response = await fetch(`/api/tasks/${id}/submit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          worker_address: walletAddress.trim(),
+          worker_address: workerAddress.trim(),
           answer: answer.trim(),
         }),
       });
 
-      const payload = (await response.json()) as SubmitResult;
-
-      setResult(payload);
+      const data = await response.json();
 
       if (!response.ok) {
-        setError(payload.error || "Submission failed.");
+        setResult({
+          error: data.error || "Submission failed.",
+        });
         return;
       }
 
-      if (payload.correct) {
+      setResult(data);
+
+      if (data.correct) {
         setTask((current) =>
-          current
-            ? {
-                ...current,
-                status: "completed",
-              }
-            : current,
+          current ? { ...current, status: "completed" } : current,
         );
       }
-    } catch (reason: unknown) {
-      setError(
-        reason instanceof Error ? reason.message : "Submission failed.",
-      );
+    } catch (error) {
+      console.error("Submission error:", error);
+
+      setResult({
+        error: "Something went wrong while submitting.",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -147,88 +110,85 @@ export default function TaskDetailPage({ params }: Props) {
 
   if (loading) {
     return (
-      <main className="doit-shell marketplace-page">
-        <TaskNav />
-
+      <main className="doit-shell">
         <section className="task-detail-state">
-          <span className="eyebrow">MISSION / SYNCING</span>
-          <h1>Loading mission<span>.</span></h1>
-          <p>Connecting to the Do-It task network.</p>
+          <div className="eyebrow">TASK / LOADING</div>
+          <h1>
+            Loading<span>.</span>
+          </h1>
+          <p>Fetching the mission details.</p>
         </section>
       </main>
     );
   }
 
-  if (error && !task) {
+  if (!task) {
     return (
-      <main className="doit-shell marketplace-page">
-        <TaskNav />
-
+      <main className="doit-shell">
         <section className="task-detail-state">
-          <span className="eyebrow">MISSION / UNAVAILABLE</span>
-          <h1>Mission not found<span>.</span></h1>
-          <p>{error}</p>
-          <Link className="task-back-link" href="/tasks">
+          <div className="eyebrow">TASK / 404</div>
+          <h1>
+            Not found<span>.</span>
+          </h1>
+          <p>This task does not exist or is no longer available.</p>
+          <Link className="text-action" href="/tasks">
             <ArrowLeft size={14} />
-            Back to missions
+            Back to marketplace
           </Link>
         </section>
       </main>
     );
   }
 
-  if (!task) return null;
-
-  const isOpen = task.status.toLowerCase() === "open";
-  const paymentTxHash = result?.txHash || result?.payment?.tx_hash;
+  const isOpen = task.status === "open";
 
   return (
-    <main className="doit-shell marketplace-page">
-      <TaskNav />
-
+    <main className="doit-shell">
       <section className="task-detail-heading">
         <div>
           <Link className="task-back-link" href="/tasks">
-            <ArrowLeft size={14} />
-            All missions
+            <ArrowLeft size={13} />
+            Back to marketplace
           </Link>
 
-          <p className="eyebrow task-eyebrow">
-            <span className="market-heading-dot" />
-            MISSION / ARC TESTNET
-          </p>
+          <div className="task-eyebrow eyebrow">
+            <span>MISSION</span>
+            <span>•</span>
+            <span className="task-id">
+              {task.id.slice(0, 8).toUpperCase()}
+            </span>
+          </div>
 
           <h1>
             {task.title}
             <span>.</span>
           </h1>
-
-          <p className="task-id mono">
-            #{task.id.replaceAll("-", "").slice(0, 8).toUpperCase()}
-          </p>
         </div>
 
         <div className="task-reward">
-          <span className="eyebrow">REWARD</span>
           <strong>
-            {Number(task.reward_usdc).toFixed(3)}
+            {Number(task.reward_usdc).toFixed(4)}
             <small>USDC</small>
           </strong>
-          <span className="mono">ARC TESTNET</span>
+
+          <span className="mono">
+            REWARD / PER COMPLETION
+          </span>
         </div>
       </section>
 
       <section className="task-detail-grid">
         <article className="task-panel task-description-panel">
-          <span className="eyebrow">01 / MISSION BRIEF</span>
+          <div className="eyebrow">MISSION BRIEF</div>
 
-          <h2>Complete the task.</h2>
+          <h2>What you need to do.</h2>
 
           <p>{task.description}</p>
 
           <div className="task-meta">
             <div>
               <span className="eyebrow">STATUS</span>
+
               <strong className={isOpen ? "task-open" : "task-closed"}>
                 <i />
                 {task.status.toUpperCase()}
@@ -236,41 +196,69 @@ export default function TaskDetailPage({ params }: Props) {
             </div>
 
             <div>
-              <span className="eyebrow">NETWORK</span>
-              <strong>ARC</strong>
+              <span className="eyebrow">REWARD</span>
+
+              <strong>
+                {Number(task.reward_usdc).toFixed(4)} USDC
+              </strong>
             </div>
           </div>
         </article>
 
         <article className="task-panel task-submit-panel">
-          <span className="eyebrow">02 / SUBMISSION</span>
+          <div className="eyebrow">SUBMISSION</div>
 
-          {!isOpen ? (
-            <div className="task-closed-state">
-              <h2>Mission completed.</h2>
-              <p>
-                This mission is no longer accepting submissions.
-              </p>
-            </div>
-          ) : (
+          {isOpen ? (
             <form onSubmit={handleSubmit}>
+              {result?.error && (
+                <div className="task-result task-result-error">
+                  <span className="eyebrow">SUBMISSION FAILED</span>
+                  <p>{result.error}</p>
+                </div>
+              )}
+
+              {result?.correct && (
+                <div className="task-result task-result-success">
+                  <span className="eyebrow">MISSION COMPLETE</span>
+
+                  <h3>{result.message}</h3>
+
+                  {result.txHash && (
+                    <a
+                      href={`https://testnet.arcscan.app/tx/${result.txHash}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      View payment
+                      <ArrowUpRight size={13} />
+                    </a>
+                  )}
+                </div>
+              )}
+
               <label className="task-field">
-                <span className="eyebrow">WORKER WALLET</span>
+                <span className="eyebrow">WALLET ADDRESS</span>
+
                 <input
-                  value={walletAddress}
-                  onChange={(event) => setWalletAddress(event.target.value)}
+                  type="text"
+                  value={workerAddress}
+                  onChange={(event) =>
+                    setWorkerAddress(event.target.value)
+                  }
                   placeholder="0x..."
-                  spellCheck={false}
-                  autoComplete="off"
+                  disabled={submitting}
                 />
+
                 <small>
-                  Your Arc wallet receives the USDC reward.
+                  This is where your reward will be sent.
                 </small>
               </label>
 
               <label className="task-field">
                 <span className="eyebrow">YOUR ANSWER</span>
+
                 <input
+                  type="text"
                   value={answer}
                   onChange={(event) => setAnswer(event.target.value)}
                   placeholder="Enter your answer"
@@ -278,82 +266,27 @@ export default function TaskDetailPage({ params }: Props) {
                 />
               </label>
 
-              {error && (
-                <div className="task-result task-result-error">
-                  <span className="eyebrow">SUBMISSION ERROR</span>
-                  <p>{error}</p>
-                </div>
-              )}
-
-              {result && !error && (
-                <div className="task-result task-result-success">
-                  <span className="eyebrow">MISSION VERIFIED</span>
-                  <h3>
-                    {result.message || "Task completed successfully."}
-                  </h3>
-
-                  {paymentTxHash && (
-                    <a
-                      href={`https://testnet.arcscan.app/tx/${paymentTxHash}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      View payment transaction
-                      <ArrowUpRight size={14} />
-                    </a>
-                  )}
-                </div>
-              )}
-
               <button
                 className="task-submit-button"
                 type="submit"
                 disabled={submitting}
               >
-                {submitting ? "Submitting…" : "Submit mission"}
-                <ArrowUpRight size={15} />
+                {submitting ? "SUBMITTING..." : "SUBMIT ANSWER"}
               </button>
             </form>
+          ) : (
+            <div className="task-closed-state">
+              <span className="eyebrow">MISSION CLOSED</span>
+
+              <h2>This mission is no longer available.</h2>
+
+              <p>
+                Another worker may have already completed this task.
+              </p>
+            </div>
           )}
         </article>
       </section>
-
-      <footer className="market-footer">
-        <span>DO-IT · Autonomous task marketplace</span>
-        <span className="mono">
-          VERIFIED WORK → USDC SETTLEMENT
-        </span>
-      </footer>
     </main>
-  );
-}
-
-function TaskNav() {
-  return (
-    <header className="doit-nav">
-      <Link href="/" className="brand">
-        DO-IT<span className="brand-period">.</span>
-      </Link>
-
-      <nav aria-label="Main navigation">
-        <Link className="nav-current" href="/tasks">
-          Missions
-        </Link>
-        <Link href="/#network">Navigation</Link>
-        <Link href="/payments">Payments</Link>
-        <Link href="/#agents">Agents</Link>
-      </nav>
-
-      <div className="nav-right">
-        <span className="network-online">
-          <i />
-          Arc Testnet online
-        </span>
-
-        <Link className="wallet-link" href="/dashboard">
-          Open dashboard <ArrowUpRight size={14} />
-        </Link>
-      </div>
-    </header>
   );
 }
