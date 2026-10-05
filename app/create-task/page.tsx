@@ -121,7 +121,7 @@ export default function CreateTaskPage() {
                     id="reward"
                     type="number"
                     min="0"
-                    step="0.01"
+                    step="0.000001"
                     value={rewardUsdc}
                     onChange={(event) => setRewardUsdc(event.target.value)}
                     className="w-full rounded-xl border border-[#d8d6d4] bg-[#faf9f8] px-4 py-3 text-sm outline-none transition focus:border-[#111111]"
