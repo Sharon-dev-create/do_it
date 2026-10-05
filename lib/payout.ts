@@ -136,7 +136,7 @@ export async function payWorker(
       sourceToken: addressToBytes32(config.usdc),
       destinationToken: addressToBytes32(config.usdc),
       sourceDepositor: addressToBytes32(gateway.address),
-      destinationRecipient: addressToBytes32(workerAddress),
+      destinationRecipient,
       sourceSigner: addressToBytes32(gateway.address),
       destinationCaller: addressToBytes32(zeroAddress),
       value: withdrawAmount,
