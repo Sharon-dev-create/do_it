@@ -5,7 +5,6 @@ import {
 } from "@circle-fin/x402-batching/client";
 import {
   maxUint256,
-  pad,
   parseUnits,
   zeroAddress,
 } from "viem";
