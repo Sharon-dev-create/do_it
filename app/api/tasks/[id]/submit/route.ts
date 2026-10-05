@@ -15,6 +15,7 @@ export async function POST(
     const { id } = await params;
     console.info("SUBMIT API: request entered", { taskId: id });
     const body = await request.json();
+    console.info("SUBMIT API: request body parsed", { taskId: id });
 
     const { worker_address, answer } = body;
 
@@ -56,6 +57,7 @@ export async function POST(
 
     // Wrong answers don't claim the task
     if (!isCorrect) {
+      console.info("SUBMIT API: recording rejected submission", { taskId: task.id });
       const { data: submission, error: submissionError } = await supabase
         .from("submissions")
         .insert({
@@ -77,6 +79,9 @@ export async function POST(
           { status: 500 },
         );
       }
+      console.info("SUBMIT API: rejected submission recorded", {
+        submissionId: submission.id,
+      });
 
       return NextResponse.json({
         submission,
@@ -107,6 +112,7 @@ export async function POST(
     console.info("SUBMIT API: task claimed", { taskId: task.id });
 
     // 5. Record the successful submission
+    console.info("SUBMIT API: recording successful submission", { taskId: task.id });
     const { data: submission, error: submissionError } = await supabase
       .from("submissions")
       .insert({
@@ -144,6 +150,7 @@ export async function POST(
     });
 
     // 6. Create the pending payment record
+    console.info("SUBMIT API: creating payment record", { taskId: task.id });
     const { data: payment, error: paymentError } = await supabase
       .from("task_payments")
       .insert({
@@ -224,6 +231,10 @@ export async function POST(
           .eq("status", "submitted")
           .select()
           .single();
+      console.info("SUBMIT API: confirmed payment update finished", {
+        paymentId: payment.id,
+        hasError: Boolean(paymentUpdateError),
+      });
 
       if (paymentUpdateError) {
         console.error(
