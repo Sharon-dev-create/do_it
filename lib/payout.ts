@@ -4,6 +4,7 @@ import {
   GatewayClient,
 } from "@circle-fin/x402-batching/client";
 import {
+  isAddress,
   maxUint256,
   parseUnits,
   zeroAddress,
@@ -15,6 +16,13 @@ export async function payWorker(
   onSubmitted?: (txHash: `0x${string}`) => Promise<void>,
 ) {
   console.info("PAYOUT: started");
+
+  if (!isAddress(workerAddress)) {
+    throw new Error(`Invalid worker address: ${workerAddress}`);
+  }
+
+  console.info("PAYOUT: worker address validated", { workerAddress });
+  
   const privateKey = process.env.SELLER_PRIVATE_KEY;
 
   if (!privateKey) {
