@@ -96,12 +96,30 @@ export async function payWorker(
   const addressToBytes32 = (address: `0x${string}`) => {
     const hex = address.slice(2);
 
-    if (hex.length !==4 0) {
+    if (hex.length !== 40) {
       throw new Error(`
         Invalid address length: expected 40 hex characters, got ${hex.length}`
       );
     }
+
+    const bytes32 = `0x${hex.padStart(64, "0")}` as `0x${string}`;
+
+    if (bytes32.length !== 66) {
+      throw new Error(
+        `Invalid bytes32 length: expected 66 hex characters, got ${bytes32.length}`
+      );
+    }
+
+    return bytes32;
   };
+
+  const destinationRecipient = addressToBytes32(workerAddress);
+
+  console.info("PAYOUT: destinationRecipient", destinationRecipient);
+  console.info(
+    "PAYOUT: destinationRecipient length",
+    destinationRecipient.length,
+  )
 
   const salt =
     `0x${randomBytes(32).toString("hex")}` as `0x${string}`;
