@@ -288,5 +288,5 @@ export default function TaskDetailPage() {
         </article>
       </section>
     </main>
-  );
+      );
 }
