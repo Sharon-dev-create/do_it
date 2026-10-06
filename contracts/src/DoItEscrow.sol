@@ -8,6 +8,7 @@ contract DoItEscrow {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable usdc;
+    address public immutable verifier;
 
     uint256 public nextTaskId;
 
@@ -27,31 +28,59 @@ contract DoItEscrow {
 
     mapping(uint256 => Task) public tasks;
 
-    //Event emitted when a new task is created
-    event TaskCreated(uint256 indexed taskId, address indexed creator, uint256 reward);
+    event TaskCreated(
+        uint256 indexed taskId,
+        address indexed creator,
+        uint256 reward
+    );
 
-    //Event emitted when a task is funded
-    event TaskFunded(uint256 indexed taskId, address indexed worker);
+    event TaskFunded(
+        uint256 indexed taskId,
+        address indexed creator,
+        uint256 amount
+    );
 
-    //Event for reward released
-    event RewardReleased(uint256 indexed taskId, address indexed creator, uint256 amount);
+    event TaskClaimed(
+        uint256 indexed taskId,
+        address indexed worker
+    );
 
-    //Event for refund released
-    event TaskRefunded(uint256 indexed taskId, address indexed creator, uint256 amount);
+    event RewardReleased(
+        uint256 indexed taskId,
+        address indexed worker,
+        uint256 amount
+    );
+
+    event TaskRefunded(
+        uint256 indexed taskId,
+        address indexed creator,
+        uint256 amount
+    );
 
     error TaskNotFound();
     error NotCreator();
     error NotWorker();
-    error InvalidWorker();
+    error NotVerifier();
     error InvalidReward();
     error InvalidStatus();
+    error InvalidVerifier();
 
-    // @param _usdc The address of the USDC token contract
-    constructor(address usdcAddress) {
+    constructor(
+        address usdcAddress,
+        address verifierAddress
+    ) {
+        if (verifierAddress == address(0)) {
+            revert InvalidVerifier();
+        }
+
         usdc = IERC20(usdcAddress);
+        verifier = verifierAddress;
     }
-    
-    function createTask(uint256 reward) external returns (uint256 taskId) {
+
+    function createTask(uint256 reward)
+        external
+        returns (uint256 taskId)
+    {
         if (reward == 0) {
             revert InvalidReward();
         }
@@ -65,55 +94,109 @@ contract DoItEscrow {
             status: TaskStatus.Created
         });
 
-        emit TaskCreated(taskId, msg.sender, reward);
+        emit TaskCreated(
+            taskId,
+            msg.sender,
+            reward
+        );
     }
 
-    function fundTask(uint256 taskId, address worker) external {
+    function fundTask(uint256 taskId) external {
         Task storage task = tasks[taskId];
 
-        if (task.status != TaskStatus.Created) {
-            revert InvalidStatus();
-        }
-
-        if (worker == address(0)) {
-            revert InvalidWorker();
+        if (task.creator == address(0)) {
+            revert TaskNotFound();
         }
 
         if (msg.sender != task.creator) {
             revert NotCreator();
         }
 
-        usdc.safeTransferFrom(task.creator, address(this), task.reward);
-        task.worker = worker;
+        if (task.status != TaskStatus.Created) {
+            revert InvalidStatus();
+        }
+
+        usdc.safeTransferFrom(
+            task.creator,
+            address(this),
+            task.reward
+        );
+
         task.status = TaskStatus.Funded;
 
-        emit TaskFunded(taskId, worker);
+        emit TaskFunded(
+            taskId,
+            task.creator,
+            task.reward
+        );
     }
 
-    function releaseReward(uint256 taskId) external {
+    function claimTask(uint256 taskId) external {
         Task storage task = tasks[taskId];
+
+        if (task.creator == address(0)) {
+            revert TaskNotFound();
+        }
 
         if (task.status != TaskStatus.Funded) {
             revert InvalidStatus();
         }
 
-        if (msg.sender != task.worker) {
+        task.worker = msg.sender;
+
+        emit TaskClaimed(
+            taskId,
+            msg.sender
+        );
+    }
+
+    function releaseReward(uint256 taskId) external {
+        Task storage task = tasks[taskId];
+
+        if (task.creator == address(0)) {
+            revert TaskNotFound();
+        }
+
+        if (msg.sender != verifier) {
+            revert NotVerifier();
+        }
+
+        if (task.status != TaskStatus.Funded) {
+            revert InvalidStatus();
+        }
+
+        if (task.worker == address(0)) {
             revert NotWorker();
         }
 
         task.status = TaskStatus.Completed;
 
-        usdc.safeTransfer(task.worker, task.reward);
+        usdc.safeTransfer(
+            task.worker,
+            task.reward
+        );
 
-        emit RewardReleased(taskId, task.creator, task.reward);
+        emit RewardReleased(
+            taskId,
+            task.worker,
+            task.reward
+        );
     }
 
     function refundTask(uint256 taskId) external {
         Task storage task = tasks[taskId];
 
-        if (task.creator == address(0)) revert TaskNotFound();
-        if (msg.sender != task.creator) revert NotCreator();
-        if (task.status != TaskStatus.Funded) revert InvalidStatus();
+        if (task.creator == address(0)) {
+            revert TaskNotFound();
+        }
+
+        if (msg.sender != task.creator) {
+            revert NotCreator();
+        }
+
+        if (task.status != TaskStatus.Funded) {
+            revert InvalidStatus();
+        }
 
         task.status = TaskStatus.Refunded;
 
