@@ -29,34 +29,15 @@ contract DoItEscrow {
 
     mapping(uint256 => Task) public tasks;
 
-    event TaskCreated(
-        uint256 indexed taskId,
-        address indexed creator,
-        uint256 reward
-    );
+    event TaskCreated(uint256 indexed taskId, address indexed creator, uint256 reward);
 
-    event TaskFunded(
-        uint256 indexed taskId,
-        address indexed creator,
-        uint256 amount
-    );
+    event TaskFunded(uint256 indexed taskId, address indexed creator, uint256 amount);
 
-    event TaskClaimed(
-        uint256 indexed taskId,
-        address indexed worker
-    );
+    event TaskClaimed(uint256 indexed taskId, address indexed worker);
 
-    event RewardReleased(
-        uint256 indexed taskId,
-        address indexed worker,
-        uint256 amount
-    );
+    event RewardReleased(uint256 indexed taskId, address indexed worker, uint256 amount);
 
-    event TaskRefunded(
-        uint256 indexed taskId,
-        address indexed creator,
-        uint256 amount
-    );
+    event TaskRefunded(uint256 indexed taskId, address indexed creator, uint256 amount);
 
     error TaskNotFound();
     error NotCreator();
@@ -65,10 +46,7 @@ contract DoItEscrow {
     error InvalidStatus();
     error InvalidVerifier();
 
-    constructor(
-        address usdcAddress,
-        address verifierAddress
-    ) {
+    constructor(address usdcAddress, address verifierAddress) {
         if (verifierAddress == address(0)) {
             revert InvalidVerifier();
         }
@@ -77,28 +55,16 @@ contract DoItEscrow {
         verifier = verifierAddress;
     }
 
-    function createTask(uint256 reward)
-        external
-        returns (uint256 taskId)
-    {
+    function createTask(uint256 reward) external returns (uint256 taskId) {
         if (reward == 0) {
             revert InvalidReward();
         }
 
         taskId = nextTaskId++;
 
-        tasks[taskId] = Task({
-            creator: msg.sender,
-            worker: address(0),
-            reward: reward,
-            status: TaskStatus.Created
-        });
+        tasks[taskId] = Task({creator: msg.sender, worker: address(0), reward: reward, status: TaskStatus.Created});
 
-        emit TaskCreated(
-            taskId,
-            msg.sender,
-            reward
-        );
+        emit TaskCreated(taskId, msg.sender, reward);
     }
 
     function fundTask(uint256 taskId) external {
@@ -116,19 +82,11 @@ contract DoItEscrow {
             revert InvalidStatus();
         }
 
-        usdc.safeTransferFrom(
-            task.creator,
-            address(this),
-            task.reward
-        );
+        usdc.safeTransferFrom(task.creator, address(this), task.reward);
 
         task.status = TaskStatus.Funded;
 
-        emit TaskFunded(
-            taskId,
-            task.creator,
-            task.reward
-        );
+        emit TaskFunded(taskId, task.creator, task.reward);
     }
 
     function claimTask(uint256 taskId) external {
@@ -145,10 +103,7 @@ contract DoItEscrow {
         task.worker = msg.sender;
         task.status = TaskStatus.Claimed;
 
-        emit TaskClaimed(
-            taskId,
-            msg.sender
-        );
+        emit TaskClaimed(taskId, msg.sender);
     }
 
     function releaseReward(uint256 taskId) external {
@@ -168,16 +123,9 @@ contract DoItEscrow {
 
         task.status = TaskStatus.Completed;
 
-        usdc.safeTransfer(
-            task.worker,
-            task.reward
-        );
+        usdc.safeTransfer(task.worker, task.reward);
 
-        emit RewardReleased(
-            taskId,
-            task.worker,
-            task.reward
-        );
+        emit RewardReleased(taskId, task.worker, task.reward);
     }
 
     function refundTask(uint256 taskId) external {
@@ -197,15 +145,8 @@ contract DoItEscrow {
 
         task.status = TaskStatus.Refunded;
 
-        usdc.safeTransfer(
-            task.creator,
-            task.reward
-        );
+        usdc.safeTransfer(task.creator, task.reward);
 
-        emit TaskRefunded(
-            taskId,
-            task.creator,
-            task.reward
-        );
+        emit TaskRefunded(taskId, task.creator, task.reward);
     }
 }
