@@ -22,7 +22,9 @@ contract MockUSDC is IERC20 {
     ) external returns (bool) {
         balanceOf[msg.sender] -= amount;
         balanceOf[to] += amount;
+
         emit Transfer(msg.sender, to, amount);
+
         return true;
     }
 
@@ -31,7 +33,9 @@ contract MockUSDC is IERC20 {
         uint256 amount
     ) external returns (bool) {
         allowance[msg.sender][spender] = amount;
+
         emit Approval(msg.sender, spender, amount);
+
         return true;
     }
 
@@ -54,7 +58,10 @@ contract MockUSDC is IERC20 {
         return true;
     }
 
-    function mint(address to, uint256 amount) external {
+    function mint(
+        address to,
+        uint256 amount
+    ) external {
         balanceOf[to] += amount;
         totalSupply += amount;
 
@@ -69,17 +76,25 @@ contract DoItEscrowTest is Test {
     address buyer = address(0x1);
     address worker = address(0x2);
     address attacker = address(0x3);
+    address verifier = address(0x4);
 
     uint256 reward = 1_000_000; // 1 USDC
 
     function setUp() public {
         usdc = new MockUSDC();
-        escrow = new DoItEscrow(address(usdc));
+
+        escrow = new DoItEscrow(
+            address(usdc),
+            verifier
+        );
 
         usdc.mint(buyer, reward);
 
         vm.prank(buyer);
-        usdc.approve(address(escrow), reward);
+        usdc.approve(
+            address(escrow),
+            reward
+        );
     }
 
     function testCreateTask() public {
@@ -88,15 +103,16 @@ contract DoItEscrowTest is Test {
         uint256 taskId = escrow.createTask(reward);
 
         (
-            address taskBuyer,
+            address taskCreator,
             address taskWorker,
             uint256 taskReward,
             DoItEscrow.TaskStatus status
         ) = escrow.tasks(taskId);
 
-        assertEq(taskBuyer, buyer);
+        assertEq(taskCreator, buyer);
         assertEq(taskWorker, address(0));
         assertEq(taskReward, reward);
+
         assertEq(
             uint256(status),
             uint256(DoItEscrow.TaskStatus.Created)
@@ -107,19 +123,23 @@ contract DoItEscrowTest is Test {
         vm.startPrank(buyer);
 
         uint256 taskId = escrow.createTask(reward);
-
-        escrow.fundTask(taskId, worker);
+        escrow.fundTask(taskId);
 
         vm.stopPrank();
 
-        assertEq(usdc.balanceOf(address(escrow)), reward);
+        assertEq(
+            usdc.balanceOf(address(escrow)),
+            reward
+        );
 
         (
             ,
-            ,
+            address taskWorker,
             ,
             DoItEscrow.TaskStatus status
         ) = escrow.tasks(taskId);
+
+        assertEq(taskWorker, address(0));
 
         assertEq(
             uint256(status),
@@ -127,17 +147,30 @@ contract DoItEscrowTest is Test {
         );
     }
 
-    function testReleaseReward() public {
+    function testOnlyBuyerCanFund() public {
+        vm.prank(buyer);
+
+        uint256 taskId = escrow.createTask(reward);
+
+        vm.prank(attacker);
+
+        vm.expectRevert(
+            DoItEscrow.NotCreator.selector
+        );
+
+        escrow.fundTask(taskId);
+    }
+
+    function testWorkerCanClaimTask() public {
         vm.startPrank(buyer);
 
         uint256 taskId = escrow.createTask(reward);
-        escrow.fundTask(taskId, worker);
-        vm.stopPrank();
-        vm.prank(worker);
-        escrow.releaseReward(taskId);
+        escrow.fundTask(taskId);
 
-        assertEq(usdc.balanceOf(worker), reward);
-        assertEq(usdc.balanceOf(address(escrow)), 0);
+        vm.stopPrank();
+
+        vm.prank(worker);
+        escrow.claimTask(taskId);
 
         (
             ,
@@ -147,23 +180,155 @@ contract DoItEscrowTest is Test {
         ) = escrow.tasks(taskId);
 
         assertEq(taskWorker, worker);
+
+        assertEq(
+            uint256(status),
+            uint256(DoItEscrow.TaskStatus.Funded)
+        );
+    }
+
+    function testOnlyFundedTaskCanBeClaimed() public {
+        vm.prank(buyer);
+
+        uint256 taskId = escrow.createTask(reward);
+
+        vm.prank(worker);
+
+        vm.expectRevert(
+            DoItEscrow.InvalidStatus.selector
+        );
+
+        escrow.claimTask(taskId);
+    }
+
+    function testReleaseReward() public {
+        vm.startPrank(buyer);
+
+        uint256 taskId = escrow.createTask(reward);
+        escrow.fundTask(taskId);
+
+        vm.stopPrank();
+
+        vm.prank(worker);
+        escrow.claimTask(taskId);
+
+        vm.prank(verifier);
+        escrow.releaseReward(taskId);
+
+        assertEq(
+            usdc.balanceOf(worker),
+            reward
+        );
+
+        assertEq(
+            usdc.balanceOf(address(escrow)),
+            0
+        );
+
+        (
+            ,
+            address taskWorker,
+            ,
+            DoItEscrow.TaskStatus status
+        ) = escrow.tasks(taskId);
+
+        assertEq(taskWorker, worker);
+
         assertEq(
             uint256(status),
             uint256(DoItEscrow.TaskStatus.Completed)
         );
     }
 
+    function testOnlyVerifierCanReleaseReward() public {
+        vm.startPrank(buyer);
+
+        uint256 taskId = escrow.createTask(reward);
+        escrow.fundTask(taskId);
+
+        vm.stopPrank();
+
+        vm.prank(worker);
+        escrow.claimTask(taskId);
+
+        vm.prank(attacker);
+
+        vm.expectRevert(
+            DoItEscrow.NotVerifier.selector
+        );
+
+        escrow.releaseReward(taskId);
+    }
+
+    function testWorkerCannotReleaseOwnReward() public {
+        vm.startPrank(buyer);
+
+        uint256 taskId = escrow.createTask(reward);
+        escrow.fundTask(taskId);
+
+        vm.stopPrank();
+
+        vm.prank(worker);
+        escrow.claimTask(taskId);
+
+        vm.prank(worker);
+
+        vm.expectRevert(
+            DoItEscrow.NotVerifier.selector
+        );
+
+        escrow.releaseReward(taskId);
+    }
+
+    function testCannotReleaseBeforeClaim() public {
+        vm.startPrank(buyer);
+
+        uint256 taskId = escrow.createTask(reward);
+        escrow.fundTask(taskId);
+
+        vm.stopPrank();
+
+        vm.prank(verifier);
+
+        vm.expectRevert(
+            DoItEscrow.NotWorker.selector
+        );
+
+        escrow.releaseReward(taskId);
+    }
+
+    function testCannotReleaseBeforeFunding() public {
+        vm.prank(buyer);
+
+        uint256 taskId = escrow.createTask(reward);
+
+        vm.prank(verifier);
+
+        vm.expectRevert(
+            DoItEscrow.InvalidStatus.selector
+        );
+
+        escrow.releaseReward(taskId);
+    }
+
     function testRefundTask() public {
         vm.startPrank(buyer);
 
         uint256 taskId = escrow.createTask(reward);
-        escrow.fundTask(taskId, worker);
+        escrow.fundTask(taskId);
         escrow.refundTask(taskId);
 
         vm.stopPrank();
 
-        assertEq(usdc.balanceOf(buyer), reward);
-        assertEq(usdc.balanceOf(address(escrow)), 0);
+        assertEq(
+            usdc.balanceOf(buyer),
+            reward
+        );
+
+        assertEq(
+            usdc.balanceOf(address(escrow)),
+            0
+        );
 
         (
             ,
@@ -178,46 +343,34 @@ contract DoItEscrowTest is Test {
         );
     }
 
-    function testOnlyBuyerCanFund() public {
-        vm.prank(buyer);
-        uint256 taskId = escrow.createTask(reward);
-
-        vm.prank(attacker);
-
-        vm.expectRevert(DoItEscrow.NotCreator.selector);
-        escrow.fundTask(taskId, worker);
-    }
-
-    function testOnlyBuyerCanReleaseReward() public {
-        vm.prank(buyer);
-
-        uint256 taskId = escrow.createTask(reward);
-
-        vm.prank(buyer);
-        escrow.fundTask(taskId, worker);
-
-        vm.prank(attacker);
-
-        vm.expectRevert(DoItEscrow.NotWorker.selector);
-        escrow.releaseReward(taskId);
-    }
-
-    function testCannotReleaseBeforeFunding() public {
-        vm.prank(buyer);
-
-        uint256 taskId = escrow.createTask(reward);
-
-        vm.expectRevert(DoItEscrow.InvalidStatus.selector);
-        escrow.releaseReward(taskId);
-    }
-
     function testCannotRefundBeforeFunding() public {
         vm.prank(buyer);
 
         uint256 taskId = escrow.createTask(reward);
 
         vm.prank(buyer);
-        vm.expectRevert(DoItEscrow.InvalidStatus.selector);
+
+        vm.expectRevert(
+            DoItEscrow.InvalidStatus.selector
+        );
+
+        escrow.refundTask(taskId);
+    }
+
+    function testOnlyBuyerCanRefund() public {
+        vm.startPrank(buyer);
+
+        uint256 taskId = escrow.createTask(reward);
+        escrow.fundTask(taskId);
+
+        vm.stopPrank();
+
+        vm.prank(attacker);
+
+        vm.expectRevert(
+            DoItEscrow.NotCreator.selector
+        );
+
         escrow.refundTask(taskId);
     }
 
@@ -225,13 +378,45 @@ contract DoItEscrowTest is Test {
         vm.startPrank(buyer);
 
         uint256 taskId = escrow.createTask(reward);
-        escrow.fundTask(taskId, worker);
+        escrow.fundTask(taskId);
+
         vm.stopPrank();
+
         vm.prank(worker);
+        escrow.claimTask(taskId);
+
+        vm.prank(verifier);
         escrow.releaseReward(taskId);
 
-        vm.expectRevert(DoItEscrow.InvalidStatus.selector);
-        vm.prank(worker);
+        vm.prank(verifier);
+
+        vm.expectRevert(
+            DoItEscrow.InvalidStatus.selector
+        );
+
         escrow.releaseReward(taskId);
+    }
+
+    function testCannotRefundAfterCompletion() public {
+        vm.startPrank(buyer);
+
+        uint256 taskId = escrow.createTask(reward);
+        escrow.fundTask(taskId);
+
+        vm.stopPrank();
+
+        vm.prank(worker);
+        escrow.claimTask(taskId);
+
+        vm.prank(verifier);
+        escrow.releaseReward(taskId);
+
+        vm.prank(buyer);
+
+        vm.expectRevert(
+            DoItEscrow.InvalidStatus.selector
+        );
+
+        escrow.refundTask(taskId);
     }
 }
