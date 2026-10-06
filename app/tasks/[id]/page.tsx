@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 type Task = {
   id: string;
@@ -152,6 +153,10 @@ export default function TaskDetailPage() {
 
   return (
     <main className="doit-shell">
+      <div>
+        <ConnectButton />
+      </div>
+
       <section className="task-detail-heading">
         <div>
           <Link className="task-back-link" href="/tasks">
