@@ -10,7 +10,10 @@ contract DeployDoItEscrow is Script {
 
     function run() external returns (DoItEscrow escrow) {
         vm.startBroadcast();
-        escrow = new DoItEscrow(ARC_TESTNET_USDC);
+        escrow = new DoItEscrow(
+            ARC_TESTNET_USDC,
+            msg.sender
+        );
         vm.stopBroadcast();
     }   
 }
