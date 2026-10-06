@@ -15,3 +15,10 @@ export const arcTestnet = defineChain({
         },
     },
 });
+
+export const config = getDefaultConfig({
+    appName: "Do-It",
+    chains: [arcTestnet],
+    projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!,
+    ssr: true,
+});
