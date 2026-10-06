@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import "./server-fetch";
 import {
   CHAIN_CONFIGS,
   GatewayClient,
