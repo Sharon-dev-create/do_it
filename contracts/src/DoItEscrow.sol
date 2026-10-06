@@ -15,6 +15,7 @@ contract DoItEscrow {
     enum TaskStatus {
         Created,
         Funded,
+        Claimed,
         Completed,
         Refunded
     }
@@ -59,7 +60,6 @@ contract DoItEscrow {
 
     error TaskNotFound();
     error NotCreator();
-    error NotWorker();
     error NotVerifier();
     error InvalidReward();
     error InvalidStatus();
@@ -143,6 +143,7 @@ contract DoItEscrow {
         }
 
         task.worker = msg.sender;
+        task.status = TaskStatus.Claimed;
 
         emit TaskClaimed(
             taskId,
@@ -161,12 +162,8 @@ contract DoItEscrow {
             revert NotVerifier();
         }
 
-        if (task.status != TaskStatus.Funded) {
+        if (task.status != TaskStatus.Claimed) {
             revert InvalidStatus();
-        }
-
-        if (task.worker == address(0)) {
-            revert NotWorker();
         }
 
         task.status = TaskStatus.Completed;
