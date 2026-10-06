@@ -89,7 +89,7 @@ contract DoItEscrow {
         emit TaskFunded(taskId, worker);
     }
 
-    function releaseReward(uint256 taskId) external {
+    function releaseReward(uint256 taskId ) external {
         Task storage task = tasks[taskId];
 
         if (task.status != TaskStatus.Funded) {
@@ -105,5 +105,26 @@ contract DoItEscrow {
         usdc.safeTransfer(task.worker, task.reward);
 
         emit RewardReleased(taskId, task.creator, task.reward);
+    }
+
+    function refundTask(uint256 taskId) external {
+        Task storage task = tasks[taskId];
+
+        if (task.buyer == address(0)) revert TaskNotFound();
+        if (msg.sender != task.buyer) revert NotBuyer();
+        if (task.status != TaskStatus.Funded) revert InvalidStatus();
+
+        task.status = TaskStatus.Refunded;
+
+        usdc.safeTransfer(
+            task.buyer,
+            task.reward
+        );
+
+        emit TaskRefunded(
+            taskId,
+            task.buyer,
+            task.reward
+        );
     }
 }
