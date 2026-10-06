@@ -35,4 +35,20 @@ contract DoItEscrow {
 
     //Event for reward released
     event RewardReleased(uint256 indexed taskId, address indexed creator, uint256 amount);
+
+    //Event for refund released
+    event RefundReleased(uint256 indexed taskId, address indexed creator, uint256 amount);
+
+    error TaskNotFound();
+    error NotCreator();
+    error NotWorker();
+    error InvalidWorker();
+    error InvalidReward();
+    error InvalidStatus();
+
+    // @param _usdc The address of the USDC token contract
+    constructor(address usdcAddress) {
+        usdc = IERC20(usdcAddress);
+    }
+
 }
