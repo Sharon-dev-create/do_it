@@ -22,6 +22,12 @@ export default function CreateTaskPage() {
     setError("");
     setIsSubmitting(true);
 
+    if (!isConnected || !address) {
+      setError("Connect your wallet before creating a task.");
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const response = await fetch("/api/tasks", {
         method: "POST",
@@ -33,7 +39,7 @@ export default function CreateTaskPage() {
           description: description.trim(),
           reward_usdc: Number(rewardUsdc),
           correct_answer: correctAnswer.trim(),
-          created_by: createdBy.trim(),
+          created_by: address,
         }),
       });
 
@@ -86,7 +92,33 @@ export default function CreateTaskPage() {
             </p>
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-6">
-              
+              <div className="rounded-2xl border border-[#e0dfdd] bg-[#faf9f8] p-4">
+                <p className="mb-3 text-sm font-medium">Creator wallet</p>
+                <ConnectButton />
+                {isConnected && address ? (
+                  <p className="mt-3 break-all text-xs text-[#585653]">
+                    Connected: {address}
+                  </p>
+                ) : (
+                  <p className="mt-3 text-xs text-[#585653]">
+                    Connect your wallet to create and fund a task.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="title" className="mb-2 block text-sm font-medium text-[#111111]">
+                  Task title
+                </label>
+                <input
+                  id="title"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Give your task a clear title"
+                  className="w-full rounded-xl border border-[#d8d6d4] bg-[#faf9f8] px-4 py-3 text-sm outline-none transition focus:border-[#111111]"
+                  required
+                />
+              </div>
 
               <div>
                 <label htmlFor="description" className="mb-2 block text-sm font-medium text-[#111111]">
@@ -103,36 +135,20 @@ export default function CreateTaskPage() {
                 />
               </div>
 
-              <div className="grid gap-5 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="reward" className="mb-2 block text-sm font-medium text-[#111111]">
-                    Reward (USDC)
-                  </label>
-                  <input
-                    id="reward"
-                    type="number"
-                    min="0"
-                    step="0.000001"
-                    value={rewardUsdc}
-                    onChange={(event) => setRewardUsdc(event.target.value)}
-                    className="w-full rounded-xl border border-[#d8d6d4] bg-[#faf9f8] px-4 py-3 text-sm outline-none transition focus:border-[#111111]"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="createdBy" className="mb-2 block text-sm font-medium text-[#111111]">
-                    Created by
-                  </label>
-                  <input
-                    id="createdBy"
-                    value={createdBy}
-                    onChange={(event) => setCreatedBy(event.target.value)}
-                    placeholder="0x... or operator name"
-                    className="w-full rounded-xl border border-[#d8d6d4] bg-[#faf9f8] px-4 py-3 text-sm outline-none transition focus:border-[#111111]"
-                    required
-                  />
-                </div>
+              <div>
+                <label htmlFor="reward" className="mb-2 block text-sm font-medium text-[#111111]">
+                  Reward (USDC)
+                </label>
+                <input
+                  id="reward"
+                  type="number"
+                  min="0"
+                  step="0.000001"
+                  value={rewardUsdc}
+                  onChange={(event) => setRewardUsdc(event.target.value)}
+                  className="w-full rounded-xl border border-[#d8d6d4] bg-[#faf9f8] px-4 py-3 text-sm outline-none transition focus:border-[#111111]"
+                  required
+                />
               </div>
 
               <div>
@@ -161,7 +177,7 @@ export default function CreateTaskPage() {
                 </Link>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !isConnected}
                   className="rounded-full bg-[#111111] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#2e2d2b] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSubmitting ? "Creating..." : "Create task"}
