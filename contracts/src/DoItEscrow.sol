@@ -37,7 +37,7 @@ contract DoItEscrow {
     event RewardReleased(uint256 indexed taskId, address indexed creator, uint256 amount);
 
     //Event for refund released
-    event RefundReleased(uint256 indexed taskId, address indexed creator, uint256 amount);
+    event TaskRefunded(uint256 indexed taskId, address indexed creator, uint256 amount);
 
     error TaskNotFound();
     error NotCreator();
@@ -110,20 +110,20 @@ contract DoItEscrow {
     function refundTask(uint256 taskId) external {
         Task storage task = tasks[taskId];
 
-        if (task.buyer == address(0)) revert TaskNotFound();
-        if (msg.sender != task.buyer) revert NotBuyer();
+        if (task.creator == address(0)) revert TaskNotFound();
+        if (msg.sender != task.creator) revert NotCreator();
         if (task.status != TaskStatus.Funded) revert InvalidStatus();
 
         task.status = TaskStatus.Refunded;
 
         usdc.safeTransfer(
-            task.buyer,
+            task.creator,
             task.reward
         );
 
         emit TaskRefunded(
             taskId,
-            task.buyer,
+            task.creator,
             task.reward
         );
     }
