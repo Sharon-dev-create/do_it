@@ -55,6 +55,39 @@ contract DoItEscrow {
         if (reward == 0) {
             revert InvalidReward();
         }
-        
+
+        taskId = nextTaskId++;
+
+        tasks[taskId] = Task({
+            creator: creator,
+            worker: address(0),
+            reward: reward,
+            status: TaskStatus.Created
+        });
+
+        emit TaskCreated(taskId, creator, reward);
     }
+
+    function fundTask(uint256 taskId, address worker) external {
+        Task storage task = tasks[taskId];
+
+        if (task.status != TaskStatus.Created) {
+            revert InvalidStatus();
+        }
+
+        if (worker == address(0)) {
+            revert InvalidWorker();
+        }
+
+        if (msg.sender != task.creator) {
+            revert NotCreator();
+        }
+
+        task.worker = worker;
+        task.status = TaskStatus.Funded;
+
+        emit TaskFunded(taskId, worker);
+    }
+
+    
 }
