@@ -50,5 +50,11 @@ contract DoItEscrow {
     constructor(address usdcAddress) {
         usdc = IERC20(usdcAddress);
     }
-
+    
+    function createTask(address creator, uint256 reward) returns (uint256 taskId) {
+        if (reward == 0) {
+            revert InvalidReward();
+        }
+        
+    }
 }
