@@ -16,6 +16,9 @@ export async function POST(request: Request) {
       reward_usdc,
       correct_answer,
       created_by,
+      blockchain_task_id,
+      create_tx_hash,
+      fund_tx_hash,
     } = body;
 
     if (
@@ -23,7 +26,10 @@ export async function POST(request: Request) {
       !description ||
       reward_usdc === undefined ||
       !correct_answer ||
-      !created_by
+      !created_by ||
+      blockchain_task_id === undefined ||
+      !create_tx_hash ||
+      !fund_tx_hash
     ) {
       return NextResponse.json(
         { error: "Missing required fields" },
@@ -39,6 +45,9 @@ export async function POST(request: Request) {
         reward_usdc,
         correct_answer,
         created_by,
+        blockchain_task_id,
+        create_tx_hash,
+        fund_tx_hash,
       })
       .select()
       .single();
@@ -52,10 +61,7 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json(
-      { task: data },
-      { status: 201 },
-    );
+    return NextResponse.json({ task: data }, { status: 201 });
   } catch (error) {
     console.error("Request error:", error);
 
@@ -71,7 +77,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("tasks")
       .select(
-        "id, title, description, reward_usdc, created_by, status, created_at, updated_at"
+        "id, title, description, reward_usdc, created_by, status, created_at, updated_at, blockchain_task_id, create_tx_hash, fund_tx_hash",
       )
       .eq("status", "open")
       .order("created_at", { ascending: false });
