@@ -19,6 +19,7 @@
 import type { Metadata } from "next";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
+import { Providers } from "@/app/providers";
 import "./globals.css";
 
 const defaultUrl = process.env.VERCEL_URL
@@ -40,7 +41,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialsed">
-        <TooltipProvider>{children}</TooltipProvider>
+        <Providers>{children}</Providers>
         <Toaster richColors position="bottom-right" />
       </body>
     </html>
