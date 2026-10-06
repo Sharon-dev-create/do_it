@@ -51,7 +51,7 @@ contract DoItEscrow {
         usdc = IERC20(usdcAddress);
     }
     
-    function createTask(address creator, uint256 reward) external returns (uint256 taskId) {
+    function createTask(uint256 reward) external returns (uint256 taskId) {
         if (reward == 0) {
             revert InvalidReward();
         }
@@ -59,13 +59,13 @@ contract DoItEscrow {
         taskId = nextTaskId++;
 
         tasks[taskId] = Task({
-            creator: creator,
+            creator: msg.sender,
             worker: address(0),
             reward: reward,
             status: TaskStatus.Created
         });
 
-        emit TaskCreated(taskId, creator, reward);
+        emit TaskCreated(taskId, msg.sender, reward);
     }
 
     function fundTask(uint256 taskId, address worker) external {
@@ -83,13 +83,14 @@ contract DoItEscrow {
             revert NotCreator();
         }
 
+        usdc.safeTransferFrom(task.creator, address(this), task.reward);
         task.worker = worker;
         task.status = TaskStatus.Funded;
 
         emit TaskFunded(taskId, worker);
     }
 
-    function releaseReward(uint256 taskId ) external {
+    function releaseReward(uint256 taskId) external {
         Task storage task = tasks[taskId];
 
         if (task.status != TaskStatus.Funded) {
