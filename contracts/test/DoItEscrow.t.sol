@@ -183,7 +183,7 @@ contract DoItEscrowTest is Test {
 
         assertEq(
             uint256(status),
-            uint256(DoItEscrow.TaskStatus.Funded)
+            uint256(DoItEscrow.TaskStatus.Claimed)
         );
     }
 
@@ -291,7 +291,7 @@ contract DoItEscrowTest is Test {
         vm.prank(verifier);
 
         vm.expectRevert(
-            DoItEscrow.NotWorker.selector
+            DoItEscrow.InvalidStatus.selector
         );
 
         escrow.releaseReward(taskId);
@@ -419,4 +419,44 @@ contract DoItEscrowTest is Test {
 
         escrow.refundTask(taskId);
     }
+
+    function testCannotClaimTwice() public {
+    vm.startPrank(buyer);
+
+    uint256 taskId = escrow.createTask(reward);
+    escrow.fundTask(taskId);
+
+    vm.stopPrank();
+
+    vm.prank(worker);
+    escrow.claimTask(taskId);
+
+    vm.prank(attacker);
+
+    vm.expectRevert(
+        DoItEscrow.InvalidStatus.selector
+    );
+
+    escrow.claimTask(taskId);
+}
+
+function testCannotRefundAfterClaim() public {
+    vm.startPrank(buyer);
+
+    uint256 taskId = escrow.createTask(reward);
+    escrow.fundTask(taskId);
+
+    vm.stopPrank();
+
+    vm.prank(worker);
+    escrow.claimTask(taskId);
+
+    vm.prank(buyer);
+
+    vm.expectRevert(
+        DoItEscrow.InvalidStatus.selector
+    );
+
+    escrow.refundTask(taskId);
+}
 }
