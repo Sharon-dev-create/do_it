@@ -3,14 +3,17 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount } from "wagmi";
 
+           
 export default function CreateTaskPage() {
   const router = useRouter();
+  const { address, isConnected } = useAccount();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [rewardUsdc, setRewardUsdc] = useState("10");
   const [correctAnswer, setCorrectAnswer] = useState("");
-  const [createdBy, setCreatedBy] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -83,19 +86,7 @@ export default function CreateTaskPage() {
             </p>
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-6">
-              <div>
-                <label htmlFor="title" className="mb-2 block text-sm font-medium text-[#111111]">
-                  Task title
-                </label>
-                <input
-                  id="title"
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder="Example: Validate market data snapshot"
-                  className="w-full rounded-xl border border-[#d8d6d4] bg-[#faf9f8] px-4 py-3 text-sm outline-none transition focus:border-[#111111]"
-                  required
-                />
-              </div>
+              
 
               <div>
                 <label htmlFor="description" className="mb-2 block text-sm font-medium text-[#111111]">
