@@ -9,6 +9,13 @@ import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { ARC_TESTNET_USDC, ERC20_ABI } from "@/lib/contracts/usdc";
 
+async function waitForTransactionReceipt(
+  publicClient: NonNullable<ReturnType<typeof usePublicClient>>,
+  hash: `0x${string}`,
+) {
+
+}
+
 export default function CreateTaskPage() {
   const router = useRouter();
   const { address, chainId, isConnected } = useAccount();
