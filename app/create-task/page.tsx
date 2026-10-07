@@ -21,9 +21,19 @@ async function waitForTransactionReceipt(
     const receipt = await publicClient.getTransactionReceipt({ hash });
 
     if (receipt.status !== "success") {
-      throw new Error("The transaction was reverted.");
+      throw new Error("The transaction was reverted on Arc.");
     }
+
     return receipt;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes("reverted on Arc"),
+      ) {
+      throw error;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollingMs));
   }
 }
 
@@ -114,7 +124,7 @@ export default function CreateTaskPage() {
         chainId: 5042002,
       });
       const approvalReceipt = await publicClient.waitForTransactionReceipt({
-        hash: approvalTxHash, 
+        hash: approvalTxHash,
         timeout: 120_000,
         pollingInterval: 2_000,
       });
