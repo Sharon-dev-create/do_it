@@ -17,7 +17,14 @@ async function waitForTransactionReceipt(
   const pollingMs = 3_000; // 3 seconds
   const startedAt = Date.now();
 
-  
+  while (Date.now() - startedAt < timeouts) {
+    const receipt = await publicClient.getTransactionReceipt({ hash });
+
+    if (receipt.status !== "success") {
+      throw new Error("The transaction was reverted.");
+    }
+    return receipt;
+  }
 }
 
 export default function CreateTaskPage() {
