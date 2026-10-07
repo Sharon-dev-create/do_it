@@ -58,6 +58,8 @@ export default function CreateTaskPage() {
       });
       const createReceipt = await publicClient.waitForTransactionReceipt({
         hash: createTxHash,
+        timeout: 120_000,
+        pollingInterval: 2_000,
       });
       if (createReceipt.status !== "success") {
         throw new Error("The create transaction was reverted.");
