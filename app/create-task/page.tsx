@@ -13,7 +13,11 @@ async function waitForTransactionReceipt(
   publicClient: NonNullable<ReturnType<typeof usePublicClient>>,
   hash: `0x${string}`,
 ) {
+  const timeouts = 180_000; // 2 minutes
+  const pollingMs = 3_000; // 3 seconds
+  const startedAt = Date.now();
 
+  
 }
 
 export default function CreateTaskPage() {
