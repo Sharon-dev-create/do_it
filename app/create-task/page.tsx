@@ -4,31 +4,126 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount } from "wagmi";
+import { decodeEventLog, parseUnits } from "viem";
+import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
+import { ARC_TESTNET_USDC, ERC20_ABI } from "@/lib/contracts/usdc";
 
-           
 export default function CreateTaskPage() {
   const router = useRouter();
-  const { address, isConnected } = useAccount();
+  const { address, chainId, isConnected } = useAccount();
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [rewardUsdc, setRewardUsdc] = useState("10");
   const [correctAnswer, setCorrectAnswer] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    setIsSubmitting(true);
 
     if (!isConnected || !address) {
       setError("Connect your wallet before creating a task.");
-      setIsSubmitting(false);
       return;
     }
 
+    if (!publicClient) {
+      setError("The Arc Testnet blockchain client is unavailable. Refresh and try again.");
+      return;
+    }
+
+    if (chainId !== 5042002) {
+      setError("Switch your wallet to Arc Testnet before creating a task.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setProgress("");
+    let stage = "Creating task on Arc";
+
     try {
+      const reward = parseUnits(rewardUsdc, 6);
+
+      setProgress("Creating task on Arc...");
+      const createTxHash = await writeContractAsync({
+        address: DO_IT_ESCROW_ADDRESS,
+        abi: DO_IT_ESCROW_ABI,
+        functionName: "createTask",
+        args: [reward],
+        chainId: 5042002,
+      });
+      const createReceipt = await publicClient.waitForTransactionReceipt({
+        hash: createTxHash,
+      });
+      if (createReceipt.status !== "success") {
+        throw new Error("The create transaction was reverted.");
+      }
+
+      const createdLog = createReceipt.logs
+        .filter((log) => log.address.toLowerCase() === DO_IT_ESCROW_ADDRESS.toLowerCase())
+        .map((log) => {
+          try {
+            return decodeEventLog({
+              abi: DO_IT_ESCROW_ABI,
+              data: log.data,
+              topics: log.topics,
+              eventName: "TaskCreated",
+            });
+          } catch {
+            return null;
+          }
+        })
+        .find((eventLog) => eventLog !== null);
+
+      if (!createdLog) {
+        throw new Error("The create transaction succeeded, but its TaskCreated event was not found.");
+      }
+      const blockchainTaskId = createdLog.args.taskId;
+
+      stage = "Approving USDC";
+      setProgress("Approving USDC...");
+      const approvalTxHash = await writeContractAsync({
+        address: ARC_TESTNET_USDC,
+        abi: ERC20_ABI,
+        functionName: "approve",
+        args: [DO_IT_ESCROW_ADDRESS, reward],
+        chainId: 5042002,
+      });
+      const approvalReceipt = await publicClient.waitForTransactionReceipt({
+        hash: approvalTxHash,
+      });
+      if (approvalReceipt.status !== "success") {
+        throw new Error("The USDC approval transaction was reverted.");
+      }
+
+      stage = "Funding task";
+      setProgress("Funding task...");
+      const fundTxHash = await writeContractAsync({
+        address: DO_IT_ESCROW_ADDRESS,
+        abi: DO_IT_ESCROW_ABI,
+        functionName: "fundTask",
+        args: [blockchainTaskId],
+        chainId: 5042002,
+      });
+      const fundReceipt = await publicClient.waitForTransactionReceipt({
+        hash: fundTxHash,
+      });
+      if (fundReceipt.status !== "success") {
+        throw new Error("The funding transaction was reverted.");
+      }
+
+      stage = "Saving task";
+      setProgress("Saving task...");
+      if (!isConnected || !address) {
+        setError("Connect your wallet before creating a task.");
+        setIsSubmitting(false);
+        return;
+      }
+
       const response = await fetch("/api/tasks", {
         method: "POST",
         headers: {
@@ -40,30 +135,33 @@ export default function CreateTaskPage() {
           reward_usdc: Number(rewardUsdc),
           correct_answer: correctAnswer.trim(),
           created_by: address,
+          blockchain_task_id: Number(blockchainTaskId),
+          create_tx_hash: createTxHash,
+          fund_tx_hash: fundTxHash,
         }),
       });
 
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(payload.error || "Unable to create task.");
+        throw new Error(payload.error || "Unable to save the funded task to Supabase.");
       }
 
-      const taskId = payload.task?.id;
-      if (taskId) {
-        router.push(`/tasks/${taskId}`);
+      const savedTaskId = payload.task?.id;
+      if (savedTaskId) {
+        router.push(`/tasks/${savedTaskId}`);
         return;
       }
 
       router.push("/dashboard");
     } catch (submitError) {
+      const details = submitError instanceof Error ? submitError.message : "Unknown error.";
       setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Unable to create task.",
+        `${stage} failed: ${details}`,
       );
     } finally {
       setIsSubmitting(false);
+      setProgress("");
     }
   }
 
@@ -168,6 +266,12 @@ export default function CreateTaskPage() {
               {error ? (
                 <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {error}
+                </p>
+              ) : null}
+
+              {progress ? (
+                <p role="status" className="text-sm text-[#585653]">
+                  {progress}
                 </p>
               ) : null}
 
