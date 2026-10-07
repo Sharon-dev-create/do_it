@@ -18,23 +18,29 @@ async function waitForTransactionReceipt(
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeouts) {
-    const receipt = await publicClient.getTransactionReceipt({ hash });
+    try {
+      const receipt = await publicClient.getTransactionReceipt({ hash });
 
-    if (receipt.status !== "success") {
-      throw new Error("The transaction was reverted on Arc.");
-    }
+      if (receipt.status !== "success") {
+        throw new Error("The transaction was reverted on Arc.");
+      }
 
-    return receipt;
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.includes("reverted on Arc"),
+      return receipt;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes("reverted on Arc")
       ) {
-      throw error;
-    }
+        throw error;
+      }
 
-    await new Promise((resolve) => setTimeout(resolve, pollingMs));
+      await new Promise((resolve) => setTimeout(resolve, pollingMs));
+    }
   }
+
+  throw new Error(
+    `Arc transaction was submitted but its receipt was not available after ${timeouts / 1000} seconds. Transaction: ${hash}`,
+  );
 }
 
 export default function CreateTaskPage() {
