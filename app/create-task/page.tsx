@@ -96,7 +96,8 @@ export default function CreateTaskPage() {
         chainId: 5042002,
       });
       const approvalReceipt = await publicClient.waitForTransactionReceipt({
-        hash: approvalTxHash,
+        hash: approvalTxHash,timeout: 120_000,
+  pollingInterval: 2_000,
       });
       if (approvalReceipt.status !== "success") {
         throw new Error("The USDC approval transaction was reverted.");
