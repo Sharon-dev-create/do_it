@@ -96,8 +96,9 @@ export default function CreateTaskPage() {
         chainId: 5042002,
       });
       const approvalReceipt = await publicClient.waitForTransactionReceipt({
-        hash: approvalTxHash,timeout: 120_000,
-  pollingInterval: 2_000,
+        hash: approvalTxHash, 
+        timeout: 120_000,
+        pollingInterval: 2_000,
       });
       if (approvalReceipt.status !== "success") {
         throw new Error("The USDC approval transaction was reverted.");
@@ -114,6 +115,8 @@ export default function CreateTaskPage() {
       });
       const fundReceipt = await publicClient.waitForTransactionReceipt({
         hash: fundTxHash,
+        timeout: 120_000,
+        pollingInterval: 2_000,
       });
       if (fundReceipt.status !== "success") {
         throw new Error("The funding transaction was reverted.");
