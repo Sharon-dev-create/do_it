@@ -9,7 +9,7 @@ import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { ARC_TESTNET_USDC, ERC20_ABI } from "@/lib/contracts/usdc";
 
-async function waitForTransactionReceipt(
+async function waitForArcReceipt(
   publicClient: NonNullable<ReturnType<typeof usePublicClient>>,
   hash: `0x${string}`,
 ) {
@@ -143,7 +143,7 @@ export default function CreateTaskPage() {
         chainId: 5042002,
       });
       const fundReceipt = await waitForArcReceipt(publicClient, fundTxHash);
-      
+
       if (fundReceipt.status !== "success") {
         throw new Error("The funding transaction was reverted.");
       }
