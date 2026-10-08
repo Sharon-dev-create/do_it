@@ -91,8 +91,8 @@ export default function CreateTaskPage() {
         chainId: 5042002,
       });
       const createReceipt = await publicClient.waitForTransactionReceipt({
-  hash: createTxHash,
-});
+        hash: createTxHash,
+      });
 
       if (createReceipt.status !== "success") {
         throw new Error("The create transaction was reverted.");
@@ -129,9 +129,9 @@ export default function CreateTaskPage() {
         chainId: 5042002,
       });
 
-const approvalReceipt = await publicClient.waitForTransactionReceipt({
-  hash: approvalTxHash,
-});
+      const approvalReceipt = await publicClient.waitForTransactionReceipt({
+        hash: approvalTxHash,
+      });
       if (approvalReceipt.status !== "success") {
         throw new Error("The USDC approval transaction was reverted.");
       }
@@ -145,9 +145,9 @@ const approvalReceipt = await publicClient.waitForTransactionReceipt({
         args: [blockchainTaskId],
         chainId: 5042002,
       });
-const fundReceipt = await publicClient.waitForTransactionReceipt({
-  hash: fundTxHash,
-});
+      const fundReceipt = await publicClient.waitForTransactionReceipt({
+        hash: fundTxHash,
+      });
       if (fundReceipt.status !== "success") {
         throw new Error("The funding transaction was reverted.");
       }
