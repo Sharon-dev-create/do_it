@@ -10,6 +10,7 @@ contract MockUSDCV2 is IERC20 {
     string public symbol = "USDC";
     uint8 public decimals = 6;
     uint256 public totalSupply;
+    bool public failTransfers;
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
     address public callbackTarget;
@@ -22,7 +23,16 @@ contract MockUSDCV2 is IERC20 {
         callbackData = data;
     }
 
+    function setDecimals(uint8 value) external {
+        decimals = value;
+    }
+
+    function setFailTransfers(bool value) external {
+        failTransfers = value;
+    }
+
     function transfer(address to, uint256 amount) external returns (bool) {
+        if (failTransfers) return false;
         balanceOf[msg.sender] -= amount;
         balanceOf[to] += amount;
         emit Transfer(msg.sender, to, amount);
@@ -39,11 +49,15 @@ contract MockUSDCV2 is IERC20 {
     }
 
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        if (failTransfers) return false;
         uint256 allowed = allowance[from][msg.sender];
         if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
         balanceOf[from] -= amount;
         balanceOf[to] += amount;
         emit Transfer(from, to, amount);
+        if (callbackTarget != address(0)) {
+            (callbackSucceeded, callbackResult) = callbackTarget.call(callbackData);
+        }
         return true;
     }
 
@@ -72,6 +86,52 @@ contract ReentrantWorker {
         } catch {
             reentryBlocked = true;
         }
+    }
+}
+
+contract ReentrantCreator {
+    DoItEscrowV2 public immutable escrow;
+    bool public reentryBlocked;
+
+    constructor(DoItEscrowV2 escrow_) {
+        escrow = escrow_;
+    }
+
+    function approveUSDC(MockUSDCV2 token) external {
+        token.approve(address(escrow), type(uint256).max);
+    }
+
+    function createAndFund(uint256 reward) external returns (uint256 taskId) {
+        taskId = escrow.createTask(reward);
+        escrow.fundTask(taskId);
+    }
+
+    function refund(uint256 taskId) external {
+        escrow.refundTask(taskId);
+    }
+
+    function onTokenTransfer(uint256 taskId) external {
+        try escrow.refundTask(taskId) {
+            reentryBlocked = false;
+        } catch {
+            reentryBlocked = true;
+        }
+    }
+
+    function onFundingTransfer(uint256 taskId) external {
+        try escrow.fundTask(taskId) {
+            reentryBlocked = false;
+        } catch {
+            reentryBlocked = true;
+        }
+    }
+
+    function createTask(uint256 reward) external returns (uint256 taskId) {
+        taskId = escrow.createTask(reward);
+    }
+
+    function fundTask(uint256 taskId) external {
+        escrow.fundTask(taskId);
     }
 }
 
@@ -117,6 +177,12 @@ contract DoItEscrowV2Test is Test {
         new DoItEscrowV2(address(usdc), address(0));
     }
 
+    function testConstructorRejectsTokenWithoutSixDecimals() public {
+        usdc.setDecimals(18);
+        vm.expectRevert(abi.encodeWithSelector(DoItEscrowV2.InvalidUSDCDecimals.selector, uint8(18)));
+        new DoItEscrowV2(address(usdc), verifier);
+    }
+
     function testFundTaskUsesAllowanceAndAddsLiabilityInSixDecimalUnits() public {
         uint256 id = _createFunded(ONE_USDC);
         assertEq(usdc.balanceOf(address(escrow)), ONE_USDC);
@@ -142,6 +208,37 @@ contract DoItEscrowV2Test is Test {
         vm.expectRevert();
         escrow.fundTask(id);
         assertEq(escrow.outstandingTaskLiabilities(), 0);
+    }
+
+    function testFundingTransferRevertLeavesTaskAndLiabilityUnchanged() public {
+        vm.prank(creator);
+        uint256 id = escrow.createTask(ONE_USDC);
+        usdc.setFailTransfers(true);
+
+        vm.prank(creator);
+        vm.expectRevert();
+        escrow.fundTask(id);
+
+        (,,, DoItEscrowV2.TaskStatus status) = escrow.tasks(id);
+        assertEq(uint256(status), uint256(DoItEscrowV2.TaskStatus.Created));
+        assertEq(escrow.outstandingTaskLiabilities(), 0);
+        assertEq(usdc.balanceOf(address(escrow)), 0);
+        assertTrue(escrow.isSolvent());
+    }
+
+    function testCannotFundTwiceOrReleaseBeforeClaim() public {
+        uint256 id = _createFunded(ONE_USDC);
+
+        vm.prank(creator);
+        vm.expectRevert(DoItEscrowV2.InvalidStatus.selector);
+        escrow.fundTask(id);
+
+        vm.prank(verifier);
+        vm.expectRevert(DoItEscrowV2.InvalidStatus.selector);
+        escrow.releaseReward(id);
+        assertEq(escrow.outstandingTaskLiabilities(), ONE_USDC);
+        assertEq(escrow.totalWithdrawableEarnings(), 0);
+        assertTrue(escrow.isSolvent());
     }
 
     function testClaimTaskAndRejectInvalidClaim() public {
@@ -228,6 +325,20 @@ contract DoItEscrowV2Test is Test {
         assertEq(escrow.availableBalance(worker), ONE_USDC);
     }
 
+    function testWithdrawalTransferRevertRollsBackEarningsAccounting() public {
+        _credit(worker, ONE_USDC);
+        usdc.setFailTransfers(true);
+
+        vm.prank(worker);
+        vm.expectRevert();
+        escrow.withdraw(ONE_USDC);
+
+        assertEq(escrow.availableBalance(worker), ONE_USDC);
+        assertEq(escrow.totalWithdrawableEarnings(), ONE_USDC);
+        assertEq(usdc.balanceOf(address(escrow)), ONE_USDC);
+        assertTrue(escrow.isSolvent());
+    }
+
     function testCallerCannotWithdrawAnotherWorkersEarnings() public {
         _credit(worker, ONE_USDC);
         vm.prank(attacker);
@@ -283,6 +394,21 @@ contract DoItEscrowV2Test is Test {
         escrow.refundTask(999);
     }
 
+    function testRefundTransferRevertRollsBackTaskAccounting() public {
+        uint256 id = _createFunded(ONE_USDC);
+        usdc.setFailTransfers(true);
+
+        vm.prank(creator);
+        vm.expectRevert();
+        escrow.refundTask(id);
+
+        (,,, DoItEscrowV2.TaskStatus status) = escrow.tasks(id);
+        assertEq(uint256(status), uint256(DoItEscrowV2.TaskStatus.Funded));
+        assertEq(escrow.outstandingTaskLiabilities(), ONE_USDC);
+        assertEq(usdc.balanceOf(address(escrow)), ONE_USDC);
+        assertTrue(escrow.isSolvent());
+    }
+
     function testMultipleTasksAccumulateForWorker() public {
         uint256 first = _createClaimed(worker, ONE_USDC);
         uint256 second = _createClaimed(worker, TWO_USDC);
@@ -318,6 +444,34 @@ contract DoItEscrowV2Test is Test {
         assertEq(escrow.availableBalance(address(reentrantWorker)), 0);
         assertEq(usdc.balanceOf(address(reentrantWorker)), ONE_USDC);
         assertEq(escrow.totalWithdrawableEarnings(), 0);
+        assertTrue(escrow.isSolvent());
+    }
+
+    function testReentrantRefundIsBlocked() public {
+        ReentrantCreator reentrantCreator = new ReentrantCreator(escrow);
+        usdc.mint(address(reentrantCreator), ONE_USDC);
+        reentrantCreator.approveUSDC(usdc);
+        uint256 id = reentrantCreator.createAndFund(ONE_USDC);
+        usdc.setCallback(address(reentrantCreator), abi.encodeCall(ReentrantCreator.onTokenTransfer, (id)));
+
+        reentrantCreator.refund(id);
+        assertTrue(reentrantCreator.reentryBlocked());
+        assertEq(escrow.outstandingTaskLiabilities(), 0);
+        assertEq(usdc.balanceOf(address(reentrantCreator)), ONE_USDC);
+        assertTrue(escrow.isSolvent());
+    }
+
+    function testReentrantFundingIsBlocked() public {
+        ReentrantCreator reentrantCreator = new ReentrantCreator(escrow);
+        usdc.mint(address(reentrantCreator), ONE_USDC);
+        reentrantCreator.approveUSDC(usdc);
+        uint256 id = reentrantCreator.createTask(ONE_USDC);
+        usdc.setCallback(address(reentrantCreator), abi.encodeCall(ReentrantCreator.onFundingTransfer, (id)));
+
+        reentrantCreator.fundTask(id);
+        assertTrue(reentrantCreator.reentryBlocked());
+        assertEq(escrow.outstandingTaskLiabilities(), ONE_USDC);
+        assertEq(usdc.balanceOf(address(escrow)), ONE_USDC);
         assertTrue(escrow.isSolvent());
     }
 
