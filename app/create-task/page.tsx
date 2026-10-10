@@ -55,6 +55,30 @@ export default function CreateTaskPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
+  const [fundedRecovery, setFundedRecovery] = useState<{ taskId: string; createTxHash: `0x${string}`; fundTxHash: `0x${string}` } | null>(null);
+
+  async function retryMetadataSave() {
+    if (!fundedRecovery || !address) return;
+    setIsSubmitting(true);
+    setError("");
+    setProgress("Reconciling the already funded task metadata...");
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(), description: description.trim(), reward_usdc: rewardUsdc,
+          correct_answer: correctAnswer.trim(), created_by: address,
+          blockchain_task_id: fundedRecovery.taskId, create_tx_hash: fundedRecovery.createTxHash,
+          fund_tx_hash: fundedRecovery.fundTxHash,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.task?.id) throw new Error(payload.error || "Metadata reconciliation is still pending.");
+      router.push(`/tasks/${payload.task.id}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Metadata reconciliation failed. Keep the original transaction hashes.");
+    } finally { setIsSubmitting(false); setProgress(""); }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -90,9 +114,13 @@ export default function CreateTaskPage() {
     let createTxHash: `0x${string}` | undefined;
     let fundTxHash: `0x${string}` | undefined;
     let blockchainTaskId: bigint | undefined;
+    let fundingConfirmed = false;
 
     try {
       const reward = parseUnits(rewardUsdc, 6);
+      if (reward > 99_999_999_999_999_999_999n) {
+        throw new Error("Reward exceeds the supported 14-digit USDC maximum.");
+      }
 
       setProgress("Creating task on Arc...");
       createTxHash = await writeContractAsync({
@@ -163,6 +191,7 @@ export default function CreateTaskPage() {
       if (fundReceipt.status !== "success") {
         throw new Error("The funding transaction was reverted.");
       }
+      fundingConfirmed = true;
 
       stage = "Saving task";
       setProgress("Saving task...");
@@ -180,7 +209,7 @@ export default function CreateTaskPage() {
         body: JSON.stringify({
           title: title.trim(),
           description: description.trim(),
-          reward_usdc: Number(rewardUsdc),
+          reward_usdc: rewardUsdc,
           correct_answer: correctAnswer.trim(),
           created_by: address,
           blockchain_task_id: blockchainTaskId.toString(),
@@ -203,6 +232,9 @@ export default function CreateTaskPage() {
 
       router.push("/dashboard");
     } catch (submitError) {
+      if (fundingConfirmed && blockchainTaskId !== undefined && createTxHash && fundTxHash) {
+        setFundedRecovery({ taskId: blockchainTaskId.toString(), createTxHash, fundTxHash });
+      }
       const details = submitError instanceof Error ? submitError.message : "Unknown error.";
       setError(
         `${stage} failed: ${details}${blockchainTaskId !== undefined && fundTxHash ? ` Recovery details: task ID ${blockchainTaskId}; create tx ${createTxHash}; funding tx ${fundTxHash}. Do not create or fund another task.` : ""}`,
@@ -326,13 +358,15 @@ export default function CreateTaskPage() {
                 </p>
               ) : null}
 
+              {fundedRecovery && <div role="status" className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><p>The on-chain task is already funded. Do not create or fund another task. Recovery uses the original task ID {fundedRecovery.taskId} and transaction hashes.</p><button type="button" disabled={isSubmitting} onClick={retryMetadataSave} className="rounded-full bg-[#111111] px-4 py-2 text-white disabled:opacity-60">{isSubmitting ? "Reconciling..." : "Retry metadata save"}</button></div>}
+
               <div className="flex items-center justify-between gap-4 pt-2">
                 <Link href="/" className="text-sm text-[#585653] hover:text-[#111111]">
                   Cancel
                 </Link>
                 <button
                   type="submit"
-                  disabled={isSubmitting || !isConnected}
+                  disabled={isSubmitting || !isConnected || Boolean(fundedRecovery)}
                   className="rounded-full bg-[#111111] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#2e2d2b] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSubmitting ? "Creating..." : "Create task"}

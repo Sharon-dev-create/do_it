@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     try {
       reward = parseUnits(String(reward_usdc), 6);
       chainTaskId = BigInt(blockchain_task_id);
-      if (reward <= 0n || chainTaskId < 0n || chainTaskId > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("out of range");
+      if (reward <= 0n || reward > 99_999_999_999_999_999_999n || chainTaskId < 0n) throw new Error("out of range");
     } catch {
       return NextResponse.json({ error: "Reward or blockchain task ID is invalid" }, { status: 400 });
     }

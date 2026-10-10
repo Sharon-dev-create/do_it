@@ -1,15 +1,24 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { decodeEventLog, isAddress, isHash } from "viem";
+import { decodeEventLog, isAddress, isHash, isHex, verifyMessage } from "viem";
 import { payWorker } from "@/lib/payout";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { ARC_CHAIN_ID, escrowPublicClient, getVerifierWalletClient, isConfiguredV2TestWorker, verifyV2TaskRecord } from "@/lib/escrow-v2-server";
+import { getTaskSubmissionMessage } from "@/lib/submission-auth";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const time = () => new Date().toISOString();
+type V2TaskRecord = {
+  id: string;
+  status: string;
+  blockchain_task_id: number | string | null;
+  created_by: string;
+  reward_usdc: number | string;
+  correct_answer: string | null;
+};
 
-async function submitV2(task: Record<string, any>, taskId: string, worker: string, answer: string, claimHash?: string, submissionId?: string) {
+async function submitV2(task: V2TaskRecord, taskId: string, worker: string, answer: string, claimHash?: string, submissionId?: string) {
   if (!isConfiguredV2TestWorker(worker)) return NextResponse.json({ error: "This V2 testnet deployment accepts submissions only from configured test workers." }, { status: 403 });
   if ((await escrowPublicClient.getChainId()) !== ARC_CHAIN_ID) return NextResponse.json({ error: "Arc Testnet RPC is unavailable or misconfigured" }, { status: 503 });
 
@@ -126,7 +135,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const body = await request.json();
     const worker = body?.worker_address;
     const answer = body?.answer;
-    if (typeof worker !== "string" || !isAddress(worker) || typeof answer !== "string" || answer.length > 1000 || !answer.trim()) return NextResponse.json({ error: "Valid worker_address and answer are required" }, { status: 400 });
+    const signature = body?.worker_signature;
+    if (typeof worker !== "string" || !isAddress(worker) || typeof answer !== "string" || answer.length > 1000 || !answer.trim() || typeof signature !== "string" || !isHex(signature)) return NextResponse.json({ error: "A connected wallet, answer, and wallet signature are required" }, { status: 400 });
+    const signatureValid = await verifyMessage({ address: worker, message: getTaskSubmissionMessage(id, answer.trim()), signature });
+    if (!signatureValid) return NextResponse.json({ error: "Wallet signature does not authorize this task answer" }, { status: 401 });
     const { data: task, error } = await supabase.from("tasks").select("*").eq("id", id).maybeSingle();
     if (error || !task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
     if (task.contract_version === "v2") return submitV2(task, id, worker, answer, body.claim_tx_hash, body.submission_id);

@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useSignMessage, useWriteContract } from "wagmi";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { isAddress } from "viem";
+import { getTaskSubmissionMessage } from "@/lib/submission-auth";
 
 type Task = {
   id: string;
@@ -35,11 +36,12 @@ type SubmitResult = {
   requiresReconciliation?: boolean;
 };
 
-export default function TaskDetailPage() {
+function TaskDetailContent() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const { address, chainId, isConnected } = useAccount();
   const publicClient = usePublicClient();
+  const { signMessageAsync } = useSignMessage();
   const { writeContractAsync } = useWriteContract();
 
   const [task, setTask] = useState<Task | null>(null);
@@ -47,7 +49,7 @@ export default function TaskDetailPage() {
   const [answer, setAnswer] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<SubmitResult | null>(null);
-  const [pendingClaim, setPendingClaim] = useState<{ submissionId: string; paymentId: string; claimTxHash?: `0x${string}` } | null>(null);
+  const [pendingClaim, setPendingClaim] = useState<{ submissionId: string; paymentId: string; claimTxHash?: `0x${string}`; signature?: `0x${string}` } | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -73,6 +75,7 @@ export default function TaskDetailPage() {
             setPendingClaim(null);
             setResult({ correct: true, credited: true, paymentId: flow.paymentId, txHash: flow.txHash, message: "Reward credited to your on-chain earnings." });
           }
+        }
       } catch (error) {
         console.error("Failed to load task:", error);
       } finally {
@@ -105,6 +108,7 @@ export default function TaskDetailPage() {
     setResult(null);
 
     try {
+      const signature = await signMessageAsync({ message: getTaskSubmissionMessage(id, answer.trim()) });
       const response = await fetch(`/api/tasks/${id}/submit`, {
         method: "POST",
         headers: {
@@ -113,6 +117,7 @@ export default function TaskDetailPage() {
         body: JSON.stringify({
           worker_address: address,
           answer: answer.trim(),
+          worker_signature: signature,
         }),
       });
       const data = await response.json();
@@ -125,9 +130,9 @@ export default function TaskDetailPage() {
       }
 
       if (data.requiresClaim && task?.contract_version === "v2") {
-        setPendingClaim({ submissionId: data.submissionId, paymentId: data.paymentId });
+        setPendingClaim({ submissionId: data.submissionId, paymentId: data.paymentId, signature });
         setResult({ correct: true, message: data.message });
-        await finalizeClaim(data.submissionId);
+        await finalizeClaim(data.submissionId, signature);
       } else {
         setResult(data);
       }
@@ -140,7 +145,7 @@ export default function TaskDetailPage() {
     }
   }
 
-  async function finalizeClaim(submissionId: string) {
+  async function finalizeClaim(submissionId: string, authorizedSignature?: `0x${string}`) {
     if (!task?.blockchain_task_id || !publicClient || !address) {
       setResult((current) => ({ ...current, error: "Arc Testnet wallet or task details are unavailable. Your accepted submission remains reserved." }));
       return;
@@ -154,7 +159,9 @@ export default function TaskDetailPage() {
         if (receipt.status !== "success") throw new Error(`Claim transaction reverted: ${claimTxHash}`);
         setPendingClaim((current) => current ? { ...current, claimTxHash } : current);
       }
-      const response = await fetch(`/api/tasks/${id}/submit`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ worker_address: address, answer: answer.trim(), submission_id: submissionId, claim_tx_hash: claimTxHash }) });
+      const signature = authorizedSignature || (pendingClaim?.submissionId === submissionId ? pendingClaim.signature : undefined) || await signMessageAsync({ message: getTaskSubmissionMessage(id, answer.trim()) });
+      setPendingClaim((current) => current ? { ...current, signature } : current);
+      const response = await fetch(`/api/tasks/${id}/submit`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ worker_address: address, answer: answer.trim(), worker_signature: signature, submission_id: submissionId, claim_tx_hash: claimTxHash }) });
       const data = await response.json();
       setResult({ ...data, error: response.ok ? data.error : data.error || "Reward credit needs reconciliation." });
       if (data.credited) {
@@ -314,7 +321,7 @@ export default function TaskDetailPage() {
               )}
 
               {pendingClaim && (
-                <button className="task-submit-button" type="button" disabled={submitting || chainId !== 5042002} onClick={() => finalizeClaim(pendingClaim.submissionId)}>
+                <button className="task-submit-button" type="button" disabled={submitting || chainId !== 5042002} onClick={() => finalizeClaim(pendingClaim.submissionId, pendingClaim.signature)}>
                   {submitting ? "WAITING FOR ARC..." : "CONTINUE: CLAIM ON ARC"}
                 </button>
               )}
@@ -365,4 +372,8 @@ export default function TaskDetailPage() {
       </section>
     </main>
       );
+}
+
+export default function TaskDetailPage() {
+  return <Suspense fallback={<main className="doit-shell"><section className="task-detail-state"><div className="eyebrow">TASK / LOADING</div><h1>Loading<span>.</span></h1><p>Fetching the mission details.</p></section></main>}><TaskDetailContent /></Suspense>;
 }
