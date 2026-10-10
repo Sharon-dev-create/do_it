@@ -26,7 +26,7 @@ async function submitV2(task: Record<string, any>, taskId: string, worker: strin
     if (payment.status === "confirmed") return NextResponse.json({ correct: true, credited: true, message: "Reward credited to your on-chain earnings.", txHash: payment.tx_hash });
     if (["submitted", "processing"].includes(payment.status)) return NextResponse.json({ correct: true, credited: false, error: "Reward processing is already in progress. Reconcile the stored transaction before retrying.", txHash: payment.tx_hash, requiresReconciliation: true }, { status: 409 });
 
-    const { data: locked } = await supabase.from("task_payments").update({ status: "processing" }).eq("id", payment.id).eq("status", "pending").select("id").maybeSingle();
+    const { data: locked } = await supabase.from("task_payments").update({ status: "processing" }).eq("id", payment.id).in("status", ["pending", "failed"]).select("id").maybeSingle();
     if (!locked) return NextResponse.json({ error: "Another request is processing this reward. Check its payment record before retrying." }, { status: 409 });
     try {
       const receipt = await escrowPublicClient.getTransactionReceipt({ hash: claimHash as `0x${string}` });

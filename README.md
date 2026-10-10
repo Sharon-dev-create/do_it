@@ -149,6 +149,9 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 # x402 / Circle Nanopayments
 SELLER_ADDRESS=0xYourWalletAddress
 SELLER_PRIVATE_KEY=0xYourSellerPrivateKey
+DOIT_VERIFIER_PRIVATE_KEY=0xYourVerifierPrivateKey
+DOIT_V2_TEST_WORKERS=0xWorkerWallet1,0xWorkerWallet2
+ARC_TESTNET_RPC_URL=https://rpc.testnet.arc.network
 
 # Buyer wallet (for the payment agent)
 BUYER_ADDRESS=0xYourBuyerWalletAddress
@@ -165,6 +168,9 @@ BUYER_PRIVATE_KEY=0xYourBuyerPrivateKey
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-side | Supabase service-role key, used to record payment events and withdrawals. |
 | `SELLER_ADDRESS` | Server-side | EVM wallet address for receiving USDC payments. |
 | `SELLER_PRIVATE_KEY` | Server-side | Seller wallet private key, used for Gateway balance queries and withdrawals. |
+| `DOIT_VERIFIER_PRIVATE_KEY` | Server-side | Optional dedicated V2 verifier key. If omitted, `SELLER_PRIVATE_KEY` is accepted only when it derives to the deployed verifier address. |
+| `DOIT_V2_TEST_WORKERS` | Server-side | Comma-separated wallet allowlist required to submit V2 testnet tasks. |
+| `ARC_TESTNET_RPC_URL` | Server-side | Arc Testnet RPC used for V2 verification and reward credits. |
 | `BUYER_ADDRESS` | Agent | Buyer wallet address for making payments. |
 | `BUYER_PRIVATE_KEY` | Agent | Buyer wallet private key for signing payment authorizations. |
 | `OPENAI_API_KEY` | Agent | *(Optional)* OpenAI API key. If omitted, the agent runs in mock mode with scripted tool calls. |
@@ -185,3 +191,9 @@ This sample application:
 - Assumes testnet usage only
 - Handles secrets via environment variables
 - Is not intended for production use without modification
+
+### Do-It Escrow V2 testnet limitation
+
+New tasks use the deployed V2 escrow on Arc Testnet. Set `DOIT_V2_TEST_WORKERS` to explicitly permit test worker wallets; without it, V2 submissions fail closed. This is an application restriction only. The deployed `claimTask(taskId)` function allows any wallet to claim a funded task directly, so the allowlist does not prevent arbitrary contract calls or claim races. Do not use this deployment for an unrestricted public marketplace. A public launch requires a new contract version with verifier-authorized claims (or an equivalent on-chain authorization), followed by an approved deployment.
+
+V2 rewards are credited to `availableBalance` and are not transferred to a worker until the worker calls `withdraw`. Circle Gateway balances and historical V1/Gateway payments remain separate.
