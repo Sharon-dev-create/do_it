@@ -75,15 +75,27 @@ export default function CreateTaskPage() {
       return;
     }
 
+    if (title.trim().length < 3 || description.trim().length < 10 || !correctAnswer.trim()) {
+      setError("Enter a title (at least 3 characters), a useful description (at least 10 characters), and the answer.");
+      return;
+    }
+    if (!/^\d+(\.\d{1,6})?$/.test(rewardUsdc) || Number(rewardUsdc) <= 0) {
+      setError("Enter a positive USDC reward with no more than six decimal places.");
+      return;
+    }
+
     setIsSubmitting(true);
     setProgress("");
     let stage = "Creating task on Arc";
+    let createTxHash: `0x${string}` | undefined;
+    let fundTxHash: `0x${string}` | undefined;
+    let blockchainTaskId: bigint | undefined;
 
     try {
       const reward = parseUnits(rewardUsdc, 6);
 
       setProgress("Creating task on Arc...");
-      const createTxHash = await writeContractAsync({
+      createTxHash = await writeContractAsync({
         address: DO_IT_ESCROW_ADDRESS,
         abi: DO_IT_ESCROW_ABI,
         functionName: "createTask",
@@ -117,7 +129,7 @@ export default function CreateTaskPage() {
       if (!createdLog) {
         throw new Error("The create transaction succeeded, but its TaskCreated event was not found.");
       }
-      const blockchainTaskId = createdLog.args.taskId;
+      blockchainTaskId = createdLog.args.taskId;
 
       stage = "Approving USDC";
       setProgress("Approving USDC...");
@@ -138,7 +150,7 @@ export default function CreateTaskPage() {
 
       stage = "Funding task";
       setProgress("Funding task...");
-      const fundTxHash = await writeContractAsync({
+      fundTxHash = await writeContractAsync({
         address: DO_IT_ESCROW_ADDRESS,
         abi: DO_IT_ESCROW_ABI,
         functionName: "fundTask",
@@ -171,7 +183,7 @@ export default function CreateTaskPage() {
           reward_usdc: Number(rewardUsdc),
           correct_answer: correctAnswer.trim(),
           created_by: address,
-          blockchain_task_id: Number(blockchainTaskId),
+          blockchain_task_id: blockchainTaskId.toString(),
           create_tx_hash: createTxHash,
           fund_tx_hash: fundTxHash,
         }),
@@ -180,7 +192,7 @@ export default function CreateTaskPage() {
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(payload.error || "Unable to save the funded task to Supabase.");
+        throw new Error(`On-chain task was created and funded, but its metadata could not be saved. Do not create or fund it again. Recovery details: task ID ${blockchainTaskId}; create tx ${createTxHash}; funding tx ${fundTxHash}. ${payload.error || "Contact support to reconcile this task."}`);
       }
 
       const savedTaskId = payload.task?.id;
@@ -193,7 +205,7 @@ export default function CreateTaskPage() {
     } catch (submitError) {
       const details = submitError instanceof Error ? submitError.message : "Unknown error.";
       setError(
-        `${stage} failed: ${details}`,
+        `${stage} failed: ${details}${blockchainTaskId !== undefined && fundTxHash ? ` Recovery details: task ID ${blockchainTaskId}; create tx ${createTxHash}; funding tx ${fundTxHash}. Do not create or fund another task.` : ""}`,
       );
     } finally {
       setIsSubmitting(false);
@@ -223,6 +235,9 @@ export default function CreateTaskPage() {
             </h1>
             <p className="mt-3 max-w-xl text-sm text-[#585653]">
               Define a task, set the reward, and route it to the worker network.
+            </p>
+            <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Arc Testnet V2 is restricted to configured test workers. The contract still allows any wallet to claim directly, so this restriction does not make it safe for a public marketplace.
             </p>
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-6">
