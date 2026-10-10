@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
+import { isAddress } from "viem";
 
 type Task = {
   id: string;
@@ -14,6 +17,10 @@ type Task = {
   created_by: string;
   status: string;
   created_at: string;
+  blockchain_task_id: string | number | null;
+  contract_version: "v1" | "v2";
+  create_tx_hash: string | null;
+  fund_tx_hash: string | null;
 };
 
 type SubmitResult = {
@@ -21,16 +28,21 @@ type SubmitResult = {
   message?: string;
   error?: string;
   txHash?: string;
+  requiresClaim?: boolean;
+  submissionId?: string;
+  credited?: boolean;
 };
 
 export default function TaskDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const { address, chainId, isConnected } = useAccount();
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
 
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [answer, setAnswer] = useState("");
-  const [workerAddress, setWorkerAddress] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<SubmitResult | null>(null);
 
@@ -60,10 +72,18 @@ export default function TaskDetailPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!workerAddress.trim() || !answer.trim()) {
+    if (!isConnected || !address) {
+      setResult({ error: "Connect the test worker wallet before submitting." });
+      return;
+    }
+    if (!answer.trim()) {
       setResult({
-        error: "Enter your wallet address and answer.",
+        error: "Enter your answer.",
       });
+      return;
+    }
+    if (task?.contract_version === "v2" && chainId !== 5042002) {
+      setResult({ error: "Switch your connected wallet to Arc Testnet before submitting a V2 task." });
       return;
     }
 
@@ -71,25 +91,17 @@ export default function TaskDetailPage() {
     setResult(null);
 
     try {
-      console.info("SUBMIT: sending request", { taskId: id });
       const response = await fetch(`/api/tasks/${id}/submit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          worker_address: workerAddress.trim(),
+          worker_address: address,
           answer: answer.trim(),
         }),
       });
-      console.info("SUBMIT: response received", { status: response.status });
-
       const data = await response.json();
-      console.info("SUBMIT: response parsed", {
-        correct: data.correct,
-        hasError: Boolean(data.error),
-        hasTxHash: Boolean(data.txHash),
-      });
 
       if (!response.ok) {
         setResult({
@@ -98,7 +110,27 @@ export default function TaskDetailPage() {
         return;
       }
 
-      setResult(data);
+      if (data.requiresClaim && task?.contract_version === "v2") {
+        if (!publicClient || !task.blockchain_task_id) throw new Error("Arc Testnet client or V2 task ID is unavailable.");
+        const claimTxHash = await writeContractAsync({
+          address: DO_IT_ESCROW_ADDRESS,
+          abi: DO_IT_ESCROW_ABI,
+          functionName: "claimTask",
+          args: [BigInt(task.blockchain_task_id)],
+          chainId: 5042002,
+        });
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: claimTxHash });
+        if (receipt.status !== "success") throw new Error(`Claim transaction reverted: ${claimTxHash}`);
+        const creditResponse = await fetch(`/api/tasks/${id}/submit`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ worker_address: address, answer: answer.trim(), submission_id: data.submissionId, claim_tx_hash: claimTxHash }),
+        });
+        const creditData = await creditResponse.json();
+        if (!creditResponse.ok) throw new Error(creditData.error || "Reward credit could not be confirmed.");
+        setResult(creditData);
+      } else {
+        setResult(data);
+      }
 
       if (data.correct) {
         setTask((current) =>
@@ -106,14 +138,11 @@ export default function TaskDetailPage() {
         );
       }
     } catch (error) {
-      console.error("Submission error:", error);
-
       setResult({
-        error: "Something went wrong while submitting.",
+        error: error instanceof Error ? error.message : "Something went wrong while submitting.",
       });
     } finally {
       setSubmitting(false);
-      console.info("SUBMIT: request finished");
     }
   }
 
@@ -232,7 +261,7 @@ export default function TaskDetailPage() {
 
               {result?.correct && (
                 <div className="task-result task-result-success">
-                  <span className="eyebrow">MISSION COMPLETE</span>
+                  <span className="eyebrow">{result.credited ? "EARNINGS CREDITED" : "MISSION COMPLETE"}</span>
 
                   <h3>{result.message}</h3>
 
@@ -242,30 +271,17 @@ export default function TaskDetailPage() {
                       target="_blank"
                       rel="noreferrer"
                     >
-                      View payment
+                      View reward-credit transaction
                       <ArrowUpRight size={13} />
                     </a>
                   )}
                 </div>
               )}
 
-              <label className="task-field">
-                <span className="eyebrow">WALLET ADDRESS</span>
-
-                <input
-                  type="text"
-                  value={workerAddress}
-                  onChange={(event) =>
-                    setWorkerAddress(event.target.value)
-                  }
-                  placeholder="0x..."
-                  disabled={submitting}
-                />
-
-                <small>
-                  This is where your reward will be sent.
-                </small>
-              </label>
+              <p className="task-field">
+                <span className="eyebrow">CONNECTED WORKER</span>
+                <small>{isConnected && address && isAddress(address) ? address : "Connect your wallet above."}</small>
+              </p>
 
               <label className="task-field">
                 <span className="eyebrow">YOUR ANSWER</span>
@@ -282,10 +298,11 @@ export default function TaskDetailPage() {
               <button
                 className="task-submit-button"
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !isConnected || (task.contract_version === "v2" && chainId !== 5042002)}
               >
-                {submitting ? "SUBMITTING..." : "SUBMIT ANSWER"}
+                {submitting ? "VERIFYING / CLAIMING..." : "SUBMIT ANSWER"}
               </button>
+              {task.contract_version === "v2" && <p className="mt-4 text-xs text-amber-800">Testnet only: V2 earnings are credited to the escrow balance; they are not transferred until you withdraw. Only configured test workers may use this flow. The contract itself still permits unrestricted direct claims, so this is not a public-marketplace security boundary.</p>}
             </form>
           ) : (
             <div className="task-closed-state">
