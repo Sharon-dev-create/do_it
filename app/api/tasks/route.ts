@@ -13,9 +13,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { title, description, reward_usdc, correct_answer, created_by, blockchain_task_id, create_tx_hash, fund_tx_hash } = body ?? {};
     if (typeof title !== "string" || title.trim().length < 3 || title.trim().length > 120 ||
-        typeof description !== "string" || description.trim().length < 10 || description.trim().length > 10000 ||
-        typeof correct_answer !== "string" || !correct_answer.trim() || correct_answer.length > 1000 ||
-        !isAddress(created_by) || !isHash(create_tx_hash) || !isHash(fund_tx_hash)) {
+      typeof description !== "string" || description.trim().length < 10 || description.trim().length > 10000 ||
+      typeof correct_answer !== "string" || !correct_answer.trim() || correct_answer.length > 1000 ||
+      !isAddress(created_by) || !isHash(create_tx_hash) || !isHash(fund_tx_hash)) {
       return NextResponse.json({ error: "Invalid task metadata or transaction details" }, { status: 400 });
     }
     let reward: bigint;
@@ -38,8 +38,8 @@ export async function POST(request: Request) {
       escrowPublicClient.getTransactionReceipt({ hash: fund_tx_hash }),
     ]);
     if (createReceipt.status !== "success" || fundReceipt.status !== "success" ||
-        createReceipt.to?.toLowerCase() !== DO_IT_ESCROW_ADDRESS.toLowerCase() ||
-        fundReceipt.to?.toLowerCase() !== DO_IT_ESCROW_ADDRESS.toLowerCase()) {
+      createReceipt.to?.toLowerCase() !== DO_IT_ESCROW_ADDRESS.toLowerCase() ||
+      fundReceipt.to?.toLowerCase() !== DO_IT_ESCROW_ADDRESS.toLowerCase()) {
       return NextResponse.json({ error: "Creation and funding transactions must both succeed on the V2 escrow" }, { status: 400 });
     }
     const created = createReceipt.logs.some((log) => {
@@ -74,11 +74,11 @@ export async function POST(request: Request) {
       const { data: raced } = await supabase.from("tasks").select(PUBLIC_TASK_FIELDS).eq("create_tx_hash", create_tx_hash).maybeSingle();
       if (raced) return NextResponse.json({ task: raced, recovered: true }, { status: 200 });
       console.error("Create task metadata insert failed:", {
-  code: error.code,
-  message: error.message,
-  details: error.details,
-  hint: error.hint,
-});
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
       return NextResponse.json({ error: "On-chain funding succeeded but metadata insert failed. Retry this same request with the same transaction hashes to reconcile; do not create or fund another task." }, { status: 500 });
     }
     return NextResponse.json({ task: data }, { status: 201 });
