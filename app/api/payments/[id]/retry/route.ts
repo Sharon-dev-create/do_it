@@ -28,6 +28,11 @@ export async function POST(
       );
     }
 
+    // V2 credits are accounting entries in the escrow, never Gateway transfers.
+    if (payment.payment_mechanism === "v2_reward_credit") {
+      return NextResponse.json({ error: "V2 escrow reward credits cannot be sent through Circle Gateway" }, { status: 409 });
+    }
+
     // 2. Only failed payments can be retried.
     // submitted payments may already have been broadcast and
     // must be reconciled instead of being paid again.
@@ -43,7 +48,7 @@ export async function POST(
     // 3. Make sure the task is still completed
     const { data: task, error: taskError } = await supabase
       .from("tasks")
-      .select("id, status, reward_usdc")
+      .select("id, status, reward_usdc, contract_version")
       .eq("id", payment.task_id)
       .single();
 
@@ -52,6 +57,14 @@ export async function POST(
         { error: "Associated task not found" },
         { status: 404 },
       );
+    }
+    if (task.contract_version === "v2") {
+      return NextResponse.json({ error: "V2 tasks cannot be paid or retried through Circle Gateway" }, { status: 409 });
+    }
+
+    // A historical hash means an earlier attempt may have been broadcast; never resend it.
+    if (payment.tx_hash) {
+      return NextResponse.json({ error: "This payment has an existing transaction hash. Reconcile it before any retry.", txHash: payment.tx_hash, requiresReconciliation: true }, { status: 409 });
     }
 
     if (task.status !== "completed") {
