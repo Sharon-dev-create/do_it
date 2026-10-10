@@ -1,5 +1,8 @@
 -- Forward-only V2 metadata; existing rows retain the legacy V1/Gateway defaults.
 alter table public.tasks
+  add column if not exists blockchain_task_id bigint,
+  add column if not exists create_tx_hash text,
+  add column if not exists fund_tx_hash text,
   add column if not exists contract_version text not null default 'v1'
     check (contract_version in ('v1', 'v2'));
 
