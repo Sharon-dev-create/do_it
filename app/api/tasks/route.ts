@@ -56,7 +56,8 @@ export async function POST(request: Request) {
         return event.args.taskId === chainTaskId && event.args.creator.toLowerCase() === created_by.toLowerCase() && event.args.amount === reward;
       } catch { return false; }
     });
-    if (!created || !funded || ARC_TESTNET_USDC.toLowerCase() === "") {
+    const escrowUsdc = await escrowPublicClient.readContract({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, functionName: "usdc" });
+    if (!created || !funded || escrowUsdc.toLowerCase() !== ARC_TESTNET_USDC.toLowerCase()) {
       return NextResponse.json({ error: "On-chain task metadata did not match the submitted transactions" }, { status: 400 });
     }
     const state = await escrowPublicClient.readContract({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, functionName: "tasks", args: [chainTaskId] });

@@ -31,6 +31,8 @@ type SubmitResult = {
   requiresClaim?: boolean;
   submissionId?: string;
   credited?: boolean;
+  paymentId?: string;
+  requiresReconciliation?: boolean;
 };
 
 export default function TaskDetailPage() {
@@ -45,6 +47,7 @@ export default function TaskDetailPage() {
   const [answer, setAnswer] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<SubmitResult | null>(null);
+  const [pendingClaim, setPendingClaim] = useState<{ submissionId: string; paymentId: string; claimTxHash?: `0x${string}` } | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -111,39 +114,60 @@ export default function TaskDetailPage() {
       }
 
       if (data.requiresClaim && task?.contract_version === "v2") {
-        if (!publicClient || !task.blockchain_task_id) throw new Error("Arc Testnet client or V2 task ID is unavailable.");
-        const claimTxHash = await writeContractAsync({
-          address: DO_IT_ESCROW_ADDRESS,
-          abi: DO_IT_ESCROW_ABI,
-          functionName: "claimTask",
-          args: [BigInt(task.blockchain_task_id)],
-          chainId: 5042002,
-        });
-        const receipt = await publicClient.waitForTransactionReceipt({ hash: claimTxHash });
-        if (receipt.status !== "success") throw new Error(`Claim transaction reverted: ${claimTxHash}`);
-        const creditResponse = await fetch(`/api/tasks/${id}/submit`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ worker_address: address, answer: answer.trim(), submission_id: data.submissionId, claim_tx_hash: claimTxHash }),
-        });
-        const creditData = await creditResponse.json();
-        if (!creditResponse.ok) throw new Error(creditData.error || "Reward credit could not be confirmed.");
-        setResult(creditData);
+        setPendingClaim({ submissionId: data.submissionId, paymentId: data.paymentId });
+        setResult({ correct: true, message: data.message });
+        await finalizeClaim(data.submissionId);
       } else {
         setResult(data);
       }
 
-      if (data.correct) {
-        setTask((current) =>
-          current ? { ...current, status: "completed" } : current,
-        );
-      }
+      if (data.correct && !data.requiresClaim) setTask((current) => current ? { ...current, status: data.credited ? "completed" : "claimed" } : current);
     } catch (error) {
-      setResult({
-        error: error instanceof Error ? error.message : "Something went wrong while submitting.",
-      });
+      setResult((current) => ({ ...current, error: error instanceof Error ? error.message : "Something went wrong while submitting." }));
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function finalizeClaim(submissionId: string) {
+    if (!task?.blockchain_task_id || !publicClient || !address) {
+      setResult((current) => ({ ...current, error: "Arc Testnet wallet or task details are unavailable. Your accepted submission remains reserved." }));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      let claimTxHash = pendingClaim?.submissionId === submissionId ? pendingClaim.claimTxHash : undefined;
+      if (!claimTxHash) {
+        claimTxHash = await writeContractAsync({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, functionName: "claimTask", args: [BigInt(task.blockchain_task_id)], chainId: 5042002 });
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: claimTxHash });
+        if (receipt.status !== "success") throw new Error(`Claim transaction reverted: ${claimTxHash}`);
+        setPendingClaim((current) => current ? { ...current, claimTxHash } : current);
+      }
+      const response = await fetch(`/api/tasks/${id}/submit`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ worker_address: address, answer: answer.trim(), submission_id: submissionId, claim_tx_hash: claimTxHash }) });
+      const data = await response.json();
+      setResult({ ...data, error: response.ok ? data.error : data.error || "Reward credit needs reconciliation." });
+      if (data.credited) {
+        setPendingClaim(null);
+        setTask((current) => current ? { ...current, status: "completed" } : current);
+      } else if (data.requiresReconciliation) {
+        setPendingClaim(null);
+        setTask((current) => current ? { ...current, status: "claimed" } : current);
+      }
+    } catch (error) {
+      setResult((current) => ({ ...current, error: error instanceof Error ? error.message : "Claim transaction failed. The submission remains reserved." }));
+    } finally { setSubmitting(false); }
+  }
+
+  async function reconcileCredit() {
+    if (!result?.paymentId) return;
+    setSubmitting(true);
+    try {
+      const response = await fetch(`/api/payments/${result.paymentId}/reconcile`, { method: "POST" });
+      const data = await response.json();
+      setResult({ ...result, ...data, credited: data.status === "confirmed", error: data.error || (data.status === "confirmed" ? undefined : data.message) });
+      if (data.status === "confirmed") setTask((current) => current ? { ...current, status: "completed" } : current);
+    } catch { setResult((current) => ({ ...current, error: "Unable to check the reward transaction yet. Keep its transaction hash for reconciliation." })); }
+    finally { setSubmitting(false); }
   }
 
   if (loading) {
@@ -278,6 +302,17 @@ export default function TaskDetailPage() {
                 </div>
               )}
 
+              {pendingClaim && (
+                <button className="task-submit-button" type="button" disabled={submitting || chainId !== 5042002} onClick={() => finalizeClaim(pendingClaim.submissionId)}>
+                  {submitting ? "WAITING FOR ARC..." : "CONTINUE: CLAIM ON ARC"}
+                </button>
+              )}
+              {result?.requiresReconciliation && result.paymentId && (
+                <button className="task-submit-button" type="button" disabled={submitting} onClick={reconcileCredit}>
+                  {submitting ? "CHECKING..." : "CHECK REWARD CREDIT STATUS"}
+                </button>
+              )}
+
               <p className="task-field">
                 <span className="eyebrow">CONNECTED WORKER</span>
                 <small>{isConnected && address && isAddress(address) ? address : "Connect your wallet above."}</small>
@@ -298,7 +333,7 @@ export default function TaskDetailPage() {
               <button
                 className="task-submit-button"
                 type="submit"
-                disabled={submitting || !isConnected || (task.contract_version === "v2" && chainId !== 5042002)}
+                disabled={submitting || Boolean(pendingClaim) || !isConnected || (task.contract_version === "v2" && chainId !== 5042002)}
               >
                 {submitting ? "VERIFYING / CLAIMING..." : "SUBMIT ANSWER"}
               </button>

@@ -58,13 +58,13 @@ async function submitV2(task: Record<string, any>, taskId: string, worker: strin
       const { data: confirmed, error } = await supabase.from("task_payments").update({ status: "confirmed", completed_at: time() }).eq("id", payment.id).eq("status", "submitted").select().maybeSingle();
       await supabase.from("submissions").update({ status: "approved", is_correct: true, verified_at: time() }).eq("id", submissionId);
       await supabase.from("tasks").update({ status: "completed", updated_at: time() }).eq("id", task.id).eq("status", "claimed");
-      if (error || !confirmed) return NextResponse.json({ correct: true, credited: true, error: "On-chain earnings were credited, but the database update needs reconciliation.", txHash, requiresReconciliation: true }, { status: 500 });
-      return NextResponse.json({ correct: true, credited: true, message: "Reward credited to your on-chain earnings. Withdraw it from your connected wallet when ready.", submissionId, payment: confirmed, txHash });
+      if (error || !confirmed) return NextResponse.json({ correct: true, credited: true, error: "On-chain earnings were credited, but the database update needs reconciliation.", paymentId: payment.id, txHash, requiresReconciliation: true }, { status: 500 });
+      return NextResponse.json({ correct: true, credited: true, message: "Reward credited to your on-chain earnings. Withdraw it from your connected wallet when ready.", submissionId, paymentId: payment.id, payment: confirmed, txHash });
     } catch (error) {
       const txHash = error && typeof error === "object" && "txHash" in error && typeof error.txHash === "string" ? error.txHash : null;
       if (txHash) await supabase.from("task_payments").update({ status: "submitted", tx_hash: txHash }).eq("id", payment.id).in("status", ["processing", "submitted"]);
       else await supabase.from("task_payments").update({ status: "failed" }).eq("id", payment.id).eq("status", "processing");
-      return NextResponse.json({ correct: true, error: txHash ? "Reward transaction was broadcast; reconcile it before taking further action." : "Could not credit the reward. The task was not paid through Gateway.", txHash, requiresReconciliation: Boolean(txHash) }, { status: txHash ? 202 : 502 });
+      return NextResponse.json({ correct: true, error: txHash ? "Reward transaction was broadcast; reconcile it before taking further action." : "Could not credit the reward. The task was not paid through Gateway.", paymentId: payment.id, txHash, requiresReconciliation: Boolean(txHash) }, { status: txHash ? 202 : 502 });
     }
   }
 
@@ -83,12 +83,12 @@ async function submitV2(task: Record<string, any>, taskId: string, worker: strin
     await supabase.from("tasks").update({ status: "open", updated_at: time() }).eq("id", task.id).eq("status", "claimed");
     return NextResponse.json({ error: "Unable to reserve the correct submission" }, { status: 500 });
   }
-  const { error: paymentError } = await supabase.from("task_payments").insert({ task_id: task.id, submission_id: submission.id, worker_address: worker, amount_usdc: task.reward_usdc, status: "pending", payment_mechanism: "v2_reward_credit" });
+  const { data: payment, error: paymentError } = await supabase.from("task_payments").insert({ task_id: task.id, submission_id: submission.id, worker_address: worker, amount_usdc: task.reward_usdc, status: "pending", payment_mechanism: "v2_reward_credit" }).select("id").single();
   if (paymentError) {
     // Keep the task reserved: a unique payment conflict may mean an earlier credit needs reconciliation.
     return NextResponse.json({ error: "Submission reserved but reward record could not be created. Contact support; do not submit again.", submissionId: submission.id }, { status: 500 });
   }
-  return NextResponse.json({ correct: true, submissionId: submission.id, requiresClaim: true, message: "Answer accepted. Confirm the Arc Testnet claim transaction to continue." });
+  return NextResponse.json({ correct: true, submissionId: submission.id, paymentId: payment.id, requiresClaim: true, message: "Answer accepted. Confirm the Arc Testnet claim transaction to continue." });
 }
 
 async function submitV1(task: Record<string, any>, worker: string, answer: string) {
