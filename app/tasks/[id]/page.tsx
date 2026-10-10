@@ -54,7 +54,8 @@ export default function TaskDetailPage() {
 
     async function loadTask() {
       try {
-        const response = await fetch(`/api/tasks/${id}`);
+        const suffix = address ? `?worker=${encodeURIComponent(address)}` : "";
+        const response = await fetch(`/api/tasks/${id}${suffix}`);
 
         if (!response.ok) {
           throw new Error("Task not found");
@@ -62,6 +63,16 @@ export default function TaskDetailPage() {
 
         const data = await response.json();
         setTask(data.task);
+        if (data.pendingRewardFlow) {
+          const flow = data.pendingRewardFlow;
+          setPendingClaim({ submissionId: flow.submissionId, paymentId: flow.paymentId, claimTxHash: flow.claimTxHash || undefined });
+          if (["submitted", "processing"].includes(flow.paymentStatus)) {
+            setPendingClaim(null);
+            setResult({ correct: true, credited: false, requiresReconciliation: true, paymentId: flow.paymentId, txHash: flow.txHash, error: "Your claim is recorded. Check the reward credit transaction before taking further action." });
+          } else if (flow.paymentStatus === "confirmed") {
+            setPendingClaim(null);
+            setResult({ correct: true, credited: true, paymentId: flow.paymentId, txHash: flow.txHash, message: "Reward credited to your on-chain earnings." });
+          }
       } catch (error) {
         console.error("Failed to load task:", error);
       } finally {
@@ -70,7 +81,7 @@ export default function TaskDetailPage() {
     }
 
     loadTask();
-  }, [id]);
+  }, [id, address]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -202,7 +213,7 @@ export default function TaskDetailPage() {
     );
   }
 
-  const isOpen = task.status === "open";
+  const isOpen = task.status === "open" || Boolean(pendingClaim) || Boolean(result?.requiresReconciliation);
 
   return (
     <main className="doit-shell">
