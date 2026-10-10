@@ -56,6 +56,27 @@ export async function POST(
     }
 
     if (payment.payment_mechanism === "v2_reward_credit") {
+      if (payment.status === "processing" && !payment.tx_hash) {
+        const { data: task } = await supabase.from("tasks").select("id, contract_version, blockchain_task_id, reward_usdc").eq("id", payment.task_id).maybeSingle();
+        if (!task || task.contract_version !== "v2" || task.blockchain_task_id === null) return NextResponse.json({ error: "V2 payment is not linked to a valid V2 task" }, { status: 409 });
+        try {
+          const chainId = BigInt(task.blockchain_task_id);
+          const state = await publicClient.readContract({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, functionName: "tasks", args: [chainId] });
+          if (state[1].toLowerCase() === payment.worker_address.toLowerCase() && state[2] === parseUnits(String(task.reward_usdc), 6) && state[3] === 3) {
+            const events = await publicClient.getContractEvents({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, eventName: "RewardCredited", args: { taskId: chainId, worker: payment.worker_address as `0x${string}` }, fromBlock: 66340107n });
+            const credit = events.findLast((event) => event.args.amount === state[2]);
+            if (credit?.transactionHash) {
+              const { data: recovered } = await supabase.from("task_payments").update({ status: "confirmed", tx_hash: credit.transactionHash, completed_at: new Date().toISOString() }).eq("id", payment.id).eq("status", "processing").select().maybeSingle();
+              await supabase.from("tasks").update({ status: "completed", updated_at: new Date().toISOString() }).eq("id", task.id).eq("status", "claimed");
+              await supabase.from("submissions").update({ status: "approved", verified_at: new Date().toISOString() }).eq("id", payment.submission_id);
+              if (recovered) return NextResponse.json({ payment: recovered, txHash: credit.transactionHash, status: "confirmed", mechanism: "v2_reward_credit", message: "Reward credit recovered from the verified on-chain event." });
+            }
+          }
+          return NextResponse.json({ payment, status: "processing", message: "No confirmed credit event is available yet. Do not retry or pay through Gateway; check again after the current transaction resolves.", requiresReconciliation: true });
+        } catch {
+          return NextResponse.json({ payment, status: "processing", message: "Arc Testnet could not verify the credit. Do not retry or pay through Gateway.", requiresReconciliation: true });
+        }
+      }
       if (payment.status !== "submitted" || !payment.tx_hash) {
         return NextResponse.json({ error: "V2 credit has no submitted transaction to reconcile", payment }, { status: 409 });
       }
