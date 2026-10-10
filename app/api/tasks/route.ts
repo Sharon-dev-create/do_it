@@ -73,7 +73,12 @@ export async function POST(request: Request) {
     if (error) {
       const { data: raced } = await supabase.from("tasks").select(PUBLIC_TASK_FIELDS).eq("create_tx_hash", create_tx_hash).maybeSingle();
       if (raced) return NextResponse.json({ task: raced, recovered: true }, { status: 200 });
-      console.error("Create task metadata insert failed");
+      console.error("Create task metadata insert failed:", {
+  code: error.code,
+  message: error.message,
+  details: error.details,
+  hint: error.hint,
+});
       return NextResponse.json({ error: "On-chain funding succeeded but metadata insert failed. Retry this same request with the same transaction hashes to reconcile; do not create or fund another task." }, { status: 500 });
     }
     return NextResponse.json({ task: data }, { status: 201 });
