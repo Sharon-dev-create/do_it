@@ -4,6 +4,7 @@ import {
   createPublicClient,
   http,
   type Hex,
+  parseUnits,
 } from "viem";
 import { decodeEventLog } from "viem";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
@@ -69,7 +70,7 @@ export async function POST(
       }
       const chainTaskId = BigInt(task.blockchain_task_id);
       let expectedReward: bigint;
-      try { expectedReward = BigInt(Math.round(Number(task.reward_usdc) * 1_000_000)); }
+      try { expectedReward = parseUnits(String(task.reward_usdc), 6); }
       catch { return NextResponse.json({ error: "Stored task reward is invalid" }, { status: 500 }); }
       const validLog = receipt.to?.toLowerCase() === DO_IT_ESCROW_ADDRESS.toLowerCase() && receipt.logs.some((log) => {
         if (log.address.toLowerCase() !== DO_IT_ESCROW_ADDRESS.toLowerCase()) return false;

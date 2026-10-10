@@ -1,5 +1,5 @@
 import "server-only";
-import { createPublicClient, createWalletClient, http, isAddress, type Address } from "viem";
+import { createPublicClient, createWalletClient, http, isAddress, parseUnits, type Address } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 
@@ -57,7 +57,7 @@ export async function verifyV2TaskRecord(task: {
     args: [taskId],
   });
   const [creator, worker, reward, status] = state;
-  const expectedReward = BigInt(Math.round(Number(task.reward_usdc) * 1_000_000));
+  const expectedReward = parseUnits(String(task.reward_usdc), 6);
   if (creator.toLowerCase() !== task.created_by.toLowerCase() || reward !== expectedReward) {
     throw new Error("On-chain task creator or reward does not match the marketplace record");
   }
