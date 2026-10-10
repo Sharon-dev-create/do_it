@@ -7,7 +7,6 @@ import {
 } from "viem";
 import { decodeEventLog } from "viem";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
-import { verifyV2TaskRecord } from "@/lib/escrow-v2-server";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -85,6 +84,11 @@ export async function POST(
       await supabase.from("tasks").update({ status: "completed", updated_at: new Date().toISOString() }).eq("id", task.id).eq("status", "claimed");
       await supabase.from("submissions").update({ status: "approved", verified_at: new Date().toISOString() }).eq("id", payment.submission_id);
       return NextResponse.json({ payment: confirmed, txHash: payment.tx_hash, status: "confirmed", mechanism: "v2_reward_credit", message: "Reward credited to the worker's on-chain earnings." });
+    }
+
+    const { data: linkedTask } = await supabase.from("tasks").select("contract_version").eq("id", payment.task_id).maybeSingle();
+    if (linkedTask?.contract_version === "v2") {
+      return NextResponse.json({ error: "V2 tasks require a V2 reward-credit payment record; generic Gateway reconciliation is disabled" }, { status: 409 });
     }
 
     // 2. Only submitted payments need reconciliation
