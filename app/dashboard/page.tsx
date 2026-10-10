@@ -54,6 +54,7 @@ import {
 import { shortenHash } from "@/lib/utils";
 import { usePaymentEvents } from "@/hooks/use-transactions";
 import { useWithdrawals } from "@/hooks/use-withdrawals";
+import { EscrowEarnings } from "@/components/dashboard/escrow-earnings";
 
 type SortDirection = "default" | "asc" | "desc";
 type SortField = "amount" | "date";
@@ -246,6 +247,8 @@ export default function Dashboard() {
           Monitor incoming nanopayments and manage withdrawals.
         </p>
       </div>
+
+      <EscrowEarnings />
 
       <div className="flex items-center gap-3 mb-4">
         <Input
