@@ -2,6 +2,7 @@ import "server-only";
 import { createPublicClient, createWalletClient, http, isAddress, parseUnits, type Address } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
+import { isV2TestWorkerAllowed } from "@/lib/v2-test-workers";
 
 export const ARC_CHAIN_ID = 5042002;
 export const ARC_EXPLORER = "https://testnet.arcscan.app";
@@ -27,10 +28,7 @@ export function getVerifierWalletClient() {
 }
 
 export function isConfiguredV2TestWorker(address: string): boolean {
-  if (!isAddress(address)) return false;
-  const configured = process.env.DOIT_V2_TEST_WORKERS;
-  if (!configured) return false;
-  return configured.split(",").map((entry) => entry.trim().toLowerCase()).includes(address.toLowerCase());
+  return isV2TestWorkerAllowed(address, process.env.DOIT_V2_TEST_WORKERS);
 }
 
 export function getV2TaskId(value: unknown): bigint | null {
