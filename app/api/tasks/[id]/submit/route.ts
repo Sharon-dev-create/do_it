@@ -37,6 +37,7 @@ async function submitV2(task: V2TaskRecord, taskId: string, worker: string, answ
 
     const { data: locked } = await supabase.from("task_payments").update({ status: "processing" }).eq("id", payment.id).in("status", ["pending", "failed"]).select("id").maybeSingle();
     if (!locked) return NextResponse.json({ error: "Another request is processing this reward. Check its payment record before retrying." }, { status: 409 });
+    let rewardStage = "verify_claim_receipt";
     try {
       const receipt = await escrowPublicClient.getTransactionReceipt({ hash: claimHash as `0x${string}` });
       const claimEvent = receipt.status === "success" && receipt.to?.toLowerCase() === DO_IT_ESCROW_ADDRESS.toLowerCase() && receipt.logs.some((log) => {
@@ -51,11 +52,16 @@ async function submitV2(task: V2TaskRecord, taskId: string, worker: string, answ
         return NextResponse.json({ error: "Claim transaction is not confirmed for this task and connected worker" }, { status: 409 });
       }
       await supabase.from("submissions").update({ claim_tx_hash: claimHash }).eq("id", submissionId);
+      rewardStage = "load_verifier_signer";
       const verifier = getVerifierWalletClient();
+      rewardStage = "broadcast_release_reward";
       const txHash = await verifier.writeContract({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, functionName: "releaseReward", args: [onchain.taskId] });
+      rewardStage = "save_reward_transaction_hash";
       await supabase.from("task_payments").update({ status: "submitted", tx_hash: txHash }).eq("id", payment.id).eq("status", "processing");
+      rewardStage = "wait_for_reward_receipt";
       const creditReceipt = await escrowPublicClient.waitForTransactionReceipt({ hash: txHash });
       if (creditReceipt.status !== "success") throw Object.assign(new Error("Reward credit transaction reverted"), { txHash });
+      rewardStage = "validate_reward_event";
       const credited = creditReceipt.logs.some((log) => {
         if (log.address.toLowerCase() !== DO_IT_ESCROW_ADDRESS.toLowerCase()) return false;
         try {
@@ -64,6 +70,7 @@ async function submitV2(task: V2TaskRecord, taskId: string, worker: string, answ
         } catch { return false; }
       });
       if (!credited) throw Object.assign(new Error("RewardCredited event was not present"), { txHash });
+      rewardStage = "finalize_payment_record";
       const { data: confirmed, error } = await supabase.from("task_payments").update({ status: "confirmed", completed_at: time() }).eq("id", payment.id).eq("status", "submitted").select().maybeSingle();
       await supabase.from("submissions").update({ status: "approved", is_correct: true, verified_at: time() }).eq("id", submissionId);
       await supabase.from("tasks").update({ status: "completed", updated_at: time() }).eq("id", task.id).eq("status", "claimed");
@@ -71,6 +78,8 @@ async function submitV2(task: V2TaskRecord, taskId: string, worker: string, answ
       return NextResponse.json({ correct: true, credited: true, message: "Reward credited to your on-chain earnings. Withdraw it from your connected wallet when ready.", submissionId, paymentId: payment.id, payment: confirmed, txHash });
     } catch (error) {
       const txHash = error && typeof error === "object" && "txHash" in error && typeof error.txHash === "string" ? error.txHash : null;
+      const errorName = error instanceof Error ? error.name : "UnknownError";
+      console.error("V2 reward attempt failed", { stage: rewardStage, errorName, transactionHashAvailable: Boolean(txHash) });
       if (txHash) await supabase.from("task_payments").update({ status: "submitted", tx_hash: txHash }).eq("id", payment.id).in("status", ["processing", "submitted"]);
       else await supabase.from("task_payments").update({ status: "failed" }).eq("id", payment.id).eq("status", "processing");
       return NextResponse.json({ correct: true, error: txHash ? "Reward transaction was broadcast; reconcile it before taking further action." : "Could not credit the reward. The task was not paid through Gateway.", paymentId: payment.id, txHash, requiresReconciliation: Boolean(txHash) }, { status: txHash ? 202 : 502 });
