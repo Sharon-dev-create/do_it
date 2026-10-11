@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { privateKeyToAccount } from "viem/accounts";
 
-export const dynamic = "force-dynamic";
-
 const EXPECTED_VERIFIER = "0x41aa5227695B8c6c5FfAD3bF3A9aAF0626921d0E";
 const PRIVATE_KEY_FORMAT = /^0x[0-9a-fA-F]{64}$/;
 const RESPONSE_HEADERS = {
@@ -28,7 +26,8 @@ function isProtectedProductionHost(request: Request) {
     .filter((host): host is string => Boolean(host))
     .map((host) => host.toLowerCase());
 
-  return allowedHosts.includes(new URL(request.url).host.toLowerCase());
+  const requestHost = request.headers.get("host")?.toLowerCase();
+  return Boolean(requestHost && allowedHosts.includes(requestHost));
 }
 
 function methodNotAllowed() {
