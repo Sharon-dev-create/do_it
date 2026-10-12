@@ -55,6 +55,8 @@ function TaskDetailContent() {
     if (!id) return;
 
     async function loadTask() {
+      setPendingClaim(null);
+      setResult(null);
       try {
         const suffix = address ? `?worker=${encodeURIComponent(address)}` : "";
         const response = await fetch(`/api/tasks/${id}${suffix}`);
