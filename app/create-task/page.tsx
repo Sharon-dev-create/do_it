@@ -268,10 +268,6 @@ export default function CreateTaskPage() {
             <p className="mt-3 max-w-xl text-sm text-[#585653]">
               Define a task, set the reward, and route it to the worker network.
             </p>
-            <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              Arc Testnet V2 is restricted to configured test workers. The contract still allows any wallet to claim directly, so this restriction does not make it safe for a public marketplace.
-            </p>
-
             <form onSubmit={handleSubmit} className="mt-8 space-y-6">
               <div className="rounded-2xl border border-[#e0dfdd] bg-[#faf9f8] p-4">
                 <p className="mb-3 text-sm font-medium">Creator wallet</p>
