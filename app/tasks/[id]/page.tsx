@@ -223,7 +223,7 @@ function TaskDetailContent() {
   }
 
   const isOpen = task.status === "open" || Boolean(pendingClaim) || Boolean(result?.requiresReconciliation);
-  const isCreator = Boolean(address && isAddress(address) && isAddress(task.created_by) && address.toLowerCase() === task.created_by.toLowerCase());
+  const isCreator = Boolean(address && isAddress(address, { strict: false }) && isAddress(task.created_by, { strict: false }) && address.toLowerCase() === task.created_by.toLowerCase());
 
   return (
     <main className="doit-shell">

@@ -145,7 +145,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const worker = body?.worker_address;
     const answer = body?.answer;
     const signature = body?.worker_signature;
-    if (typeof worker !== "string" || !isAddress(worker) || typeof answer !== "string" || answer.length > 1000 || !answer.trim() || typeof signature !== "string" || !isHex(signature)) return NextResponse.json({ error: "A connected wallet, answer, and wallet signature are required" }, { status: 400 });
+    if (typeof worker !== "string" || !isAddress(worker, { strict: false }) || typeof answer !== "string" || answer.length > 1000 || !answer.trim() || typeof signature !== "string" || !isHex(signature)) return NextResponse.json({ error: "A connected wallet, answer, and wallet signature are required" }, { status: 400 });
     const signatureValid = await verifyMessage({ address: worker, message: getTaskSubmissionMessage(id, answer.trim()), signature });
     if (!signatureValid) return NextResponse.json({ error: "Wallet signature does not authorize this task answer" }, { status: 401 });
     const { data: task, error } = await supabase.from("tasks").select("*").eq("id", id).maybeSingle();

@@ -5,7 +5,7 @@ export function isSameWallet(address: string, otherAddress: string) {
 }
 
 export function getTaskCreatorSubmissionError(creator: unknown, worker: string) {
-  if (typeof creator !== "string" || !isAddress(creator)) return "invalid_creator" as const;
+  if (typeof creator !== "string" || !isAddress(creator, { strict: false })) return "invalid_creator" as const;
   return isSameWallet(creator, worker) ? "creator" as const : null;
 }
 
