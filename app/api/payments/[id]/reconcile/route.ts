@@ -18,7 +18,7 @@ const arcTestnet = {
   id: 5042002,
   name: "Arc Testnet",
   nativeCurrency: {
-    name: "USDC",
+    name: "USDC", 
     symbol: "USDC",
     decimals: 18,
   },
