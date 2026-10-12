@@ -4,7 +4,7 @@ import { decodeEventLog, isAddress, isHash, isHex, verifyMessage } from "viem";
 import { payWorker } from "@/lib/payout";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { ARC_CHAIN_ID, escrowPublicClient, getVerifierWalletClient, isConfiguredV2TestWorker, verifyV2TaskRecord } from "@/lib/escrow-v2-server";
-import { getTaskSubmissionMessage } from "@/lib/submission-auth";
+import { getTaskSubmissionMessage, isSameWallet } from "@/lib/submission-auth";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -150,6 +150,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!signatureValid) return NextResponse.json({ error: "Wallet signature does not authorize this task answer" }, { status: 401 });
     const { data: task, error } = await supabase.from("tasks").select("*").eq("id", id).maybeSingle();
     if (error || !task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    if (typeof task.created_by !== "string" || !isAddress(task.created_by)) {
+      return NextResponse.json({ error: "Task creator metadata is invalid" }, { status: 500 });
+    }
+    if (isSameWallet(worker, task.created_by)) {
+      return NextResponse.json({ error: "You cannot submit an answer to a task you created." }, { status: 403 });
+    }
     if (task.contract_version === "v2") return submitV2(task, id, worker, answer, body.claim_tx_hash, body.submission_id);
     return submitV1(task, worker, answer);
   } catch {

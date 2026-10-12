@@ -221,6 +221,7 @@ function TaskDetailContent() {
   }
 
   const isOpen = task.status === "open" || Boolean(pendingClaim) || Boolean(result?.requiresReconciliation);
+  const isCreator = Boolean(address && isAddress(address) && isAddress(task.created_by) && address.toLowerCase() === task.created_by.toLowerCase());
 
   return (
     <main className="doit-shell">
@@ -292,7 +293,13 @@ function TaskDetailContent() {
         <article className="task-panel task-submit-panel">
           <div className="eyebrow">SUBMISSION</div>
 
-          {isOpen ? (
+          {isCreator ? (
+            <div className="task-closed-state">
+              <span className="eyebrow">CREATOR WALLET</span>
+              <h2>You created this task.</h2>
+              <p>Connect a different wallet to participate.</p>
+            </div>
+          ) : isOpen ? (
             <form onSubmit={handleSubmit}>
               {result?.error && (
                 <div className="task-result task-result-error">

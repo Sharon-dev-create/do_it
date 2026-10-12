@@ -1,5 +1,9 @@
 import { keccak256, toBytes } from "viem";
 
+export function isSameWallet(address: string, otherAddress: string) {
+  return address.toLowerCase() === otherAddress.toLowerCase();
+}
+
 export function getTaskSubmissionMessage(taskId: string, answer: string) {
   const answerHash = keccak256(toBytes(answer));
   return [
