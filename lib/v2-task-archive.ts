@@ -56,7 +56,7 @@ export async function getVerifiedV2TerminalStatus(task: V2TaskForArchive, paymen
         fromBlock: V2_DEPLOYMENT_BLOCK,
       });
       return events.some((event) => event.args.taskId === chainTaskId &&
-        event.args.creator.toLowerCase() === task.created_by.toLowerCase() && event.args.amount === expectedReward) ? 4 : null;
+        event.args.creator?.toLowerCase() === task.created_by.toLowerCase() && event.args.amount === expectedReward) ? 4 : null;
     }
     return null;
   } catch {
