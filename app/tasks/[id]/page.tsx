@@ -9,7 +9,7 @@ import { useAccount, usePublicClient, useSignMessage, useWriteContract } from "w
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { isAddress } from "viem";
 import { getWorkerSessionChallengeMessage } from "@/lib/worker-session-auth";
-import { postTaskAnswer } from "@/lib/task-submission-client";
+import { getTaskSubmissionNotice, postTaskAnswer } from "@/lib/task-submission-client";
 
 type Task = {
   id: string;
@@ -57,6 +57,7 @@ function TaskDetailContent() {
   const activeWallet = useRef(address?.toLowerCase() ?? null);
   activeWallet.current = address?.toLowerCase() ?? null;
   const isWorkerAuthorized = Boolean(address && authorizedWorker === address.toLowerCase());
+  const submissionNotice = getTaskSubmissionNotice(result);
 
   useEffect(() => {
     let cancelled = false;
@@ -367,10 +368,10 @@ function TaskDetailContent() {
             </div>
           ) : isOpen ? (
             <form onSubmit={handleSubmit}>
-              {result?.error && (
+              {submissionNotice && (
                 <div className="task-result task-result-error">
                   <span className="eyebrow">SUBMISSION FAILED</span>
-                  <p>{result.error}</p>
+                  <p>{submissionNotice}</p>
                 </div>
               )}
 
