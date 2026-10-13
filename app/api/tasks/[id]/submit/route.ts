@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
-import { decodeEventLog, isAddress, isHash, isHex, verifyMessage } from "viem";
+import { decodeEventLog, isAddress, isHash } from "viem";
 import { payWorker } from "@/lib/payout";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { ARC_CHAIN_ID, escrowPublicClient, getVerifierWalletClient, isConfiguredV2TestWorker, verifyV2TaskRecord } from "@/lib/escrow-v2-server";
-import { getTaskCreatorSubmissionError, getTaskSubmissionMessage } from "@/lib/submission-auth";
+import { getTaskCreatorSubmissionError } from "@/lib/submission-auth";
+import { getWorkerAddressFromSessionToken, WORKER_SESSION_COOKIE } from "@/lib/worker-session-auth";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -142,12 +144,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!UUID.test(id)) return NextResponse.json({ error: "Invalid task ID" }, { status: 400 });
   try {
     const body = await request.json();
-    const worker = body?.worker_address;
+    const requestedWorker = body?.worker_address;
     const answer = body?.answer;
-    const signature = body?.worker_signature;
-    if (typeof worker !== "string" || !isAddress(worker, { strict: false }) || typeof answer !== "string" || answer.length > 1000 || !answer.trim() || typeof signature !== "string" || !isHex(signature)) return NextResponse.json({ error: "A connected wallet, answer, and wallet signature are required" }, { status: 400 });
-    const signatureValid = await verifyMessage({ address: worker, message: getTaskSubmissionMessage(id, answer.trim()), signature });
-    if (!signatureValid) return NextResponse.json({ error: "Wallet signature does not authorize this task answer" }, { status: 401 });
+    if (typeof requestedWorker !== "string" || !isAddress(requestedWorker, { strict: false }) || typeof answer !== "string" || answer.length > 1000 || !answer.trim()) {
+      return NextResponse.json({ error: "A connected wallet and valid answer are required" }, { status: 400 });
+    }
+    const cookieStore = await cookies();
+    const worker = getWorkerAddressFromSessionToken(
+      cookieStore.get(WORKER_SESSION_COOKIE)?.value,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+    );
+    if (!worker || worker !== requestedWorker.toLowerCase()) {
+      return NextResponse.json({ error: "Authorize the connected worker wallet before submitting" }, { status: 401 });
+    }
     const { data: task, error } = await supabase.from("tasks").select("*").eq("id", id).maybeSingle();
     if (error || !task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
     const creatorError = getTaskCreatorSubmissionError(task.created_by, worker);
