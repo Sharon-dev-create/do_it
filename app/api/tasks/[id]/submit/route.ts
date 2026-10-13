@@ -97,6 +97,8 @@ async function submitV2(task: V2TaskRecord, taskId: string, worker: string, answ
       p_answer: answer,
     });
     if (error) return NextResponse.json({ error: "Failed to record rejected submission" }, { status: 500 });
+    if (result?.outcome === "creator_self_submission") return NextResponse.json({ error: "You cannot submit an answer to a task you created." }, { status: 403 });
+    if (result?.outcome === "invalid_input") return NextResponse.json({ error: "A valid wallet and answer are required" }, { status: 400 });
     if (result?.outcome === "archived") return NextResponse.json({ error: "This task is archived and cannot accept submissions" }, { status: 410 });
     if (result?.outcome === "closed") return NextResponse.json({ error: "Task is no longer open" }, { status: 409 });
     if (result?.outcome !== "recorded") return NextResponse.json({ error: "Task not found" }, { status: 404 });
@@ -129,6 +131,8 @@ async function submitV1(task: Record<string, any>, worker: string, answer: strin
       p_answer: answer,
     });
     if (error) return NextResponse.json({ error: "Failed to record submission" }, { status: 500 });
+    if (result?.outcome === "creator_self_submission") return NextResponse.json({ error: "You cannot submit an answer to a task you created." }, { status: 403 });
+    if (result?.outcome === "invalid_input") return NextResponse.json({ error: "A valid wallet and answer are required" }, { status: 400 });
     if (result?.outcome === "archived") return NextResponse.json({ error: "This task is archived and cannot accept submissions" }, { status: 410 });
     if (result?.outcome === "closed") return NextResponse.json({ error: "Task is no longer open" }, { status: 409 });
     if (result?.outcome !== "recorded") return NextResponse.json({ error: "Task not found" }, { status: 404 });

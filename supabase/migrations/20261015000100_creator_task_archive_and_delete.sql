@@ -1,3 +1,8 @@
+-- Remove the earlier API signatures if this migration is being reconciled with
+-- a database that saw a pre-release version of this migration.
+drop function if exists public.delete_creator_tasks(uuid[], text);
+drop function if exists public.delete_creator_task(uuid, text);
+
 alter table public.tasks
   add column if not exists archived_at timestamptz,
   add column if not exists creation_batch_id uuid,
@@ -31,7 +36,7 @@ create or replace function public.delete_creator_task(p_task_id uuid, p_creator_
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = pg_catalog, public
 as $$
 declare
   task_row public.tasks%rowtype;
@@ -104,7 +109,7 @@ create or replace function public.delete_creator_tasks(p_task_ids uuid[], p_crea
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = pg_catalog, public
 as $$
 declare
   task_id uuid;
@@ -150,7 +155,7 @@ create or replace function public.create_creator_task_batch(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = pg_catalog, public
 as $$
 declare
   batch_row public.task_creation_batches%rowtype;
@@ -215,14 +220,20 @@ create or replace function public.record_rejected_task_submission(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = pg_catalog, public
 as $$
 declare
   task_status text;
   task_archived_at timestamptz;
+  task_creator text;
   submission_row public.submissions%rowtype;
 begin
-  select status, archived_at into task_status, task_archived_at
+  if p_worker_address is null or p_worker_address !~ '^0x[0-9a-fA-F]{40}$' or
+     p_answer is null or length(p_answer) > 1000 or length(btrim(p_answer)) = 0 then
+    return jsonb_build_object('outcome', 'invalid_input');
+  end if;
+
+  select status, archived_at, created_by into task_status, task_archived_at, task_creator
   from public.tasks where id = p_task_id for update;
   if not found then
     return jsonb_build_object('outcome', 'not_found');
@@ -232,6 +243,9 @@ begin
   end if;
   if task_status <> 'open' then
     return jsonb_build_object('outcome', 'closed');
+  end if;
+  if pg_catalog.lower(task_creator) = pg_catalog.lower(p_worker_address) then
+    return jsonb_build_object('outcome', 'creator_self_submission');
   end if;
   insert into public.submissions(task_id, worker_address, answer, is_correct, status, verified_at)
   values (p_task_id, p_worker_address, p_answer, false, 'rejected', now())
