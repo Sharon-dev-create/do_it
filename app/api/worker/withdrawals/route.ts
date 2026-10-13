@@ -57,7 +57,7 @@ async function indexConfirmedEvents(workerAddress: string, fromBlock: bigint, to
   const blockTimes = new Map<string, string>();
   const rows = [];
   for (const log of logs) {
-    if (!log.transactionHash || log.blockNumber === null || log.logIndex === null ||
+    if (!log.transactionHash || log.blockNumber === null || log.logIndex === null || !log.args.worker || log.args.amount === undefined ||
         log.args.worker.toLowerCase() !== workerAddress || log.args.amount <= 0n) continue;
     const receipt = await escrowPublicClient.getTransactionReceipt({ hash: log.transactionHash });
     if (receipt.status !== "success" || receipt.to?.toLowerCase() !== DO_IT_ESCROW_ADDRESS.toLowerCase()) continue;
