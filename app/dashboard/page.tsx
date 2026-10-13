@@ -55,6 +55,7 @@ import { shortenHash } from "@/lib/utils";
 import { usePaymentEvents } from "@/hooks/use-transactions";
 import { useWithdrawals } from "@/hooks/use-withdrawals";
 import { EscrowEarnings } from "@/components/dashboard/escrow-earnings";
+import { CreatorTaskManager } from "@/components/dashboard/creator-task-manager";
 
 type SortDirection = "default" | "asc" | "desc";
 type SortField = "amount" | "date";
@@ -249,6 +250,7 @@ export default function Dashboard() {
       </div>
 
       <EscrowEarnings />
+      <CreatorTaskManager />
 
       <div className="flex items-center gap-3 mb-4">
         <Input

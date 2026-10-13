@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, usePublicClient, useSignMessage, useWriteContract } from "wagmi";
@@ -39,6 +39,7 @@ type SubmitResult = {
 
 function TaskDetailContent() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const id = params.id;
   const { address, chainId, isConnected } = useAccount();
   const publicClient = usePublicClient();
@@ -54,9 +55,11 @@ function TaskDetailContent() {
   const [authorizedWorker, setAuthorizedWorker] = useState<string | null>(null);
   const [authorizingWorker, setAuthorizingWorker] = useState(false);
   const [authorizationError, setAuthorizationError] = useState("");
+  const [deletingTask, setDeletingTask] = useState(false);
   const activeWallet = useRef(address?.toLowerCase() ?? null);
   activeWallet.current = address?.toLowerCase() ?? null;
   const isWorkerAuthorized = Boolean(address && authorizedWorker === address.toLowerCase());
+  const isCreator = Boolean(address && task && isAddress(address, { strict: false }) && isAddress(task.created_by, { strict: false }) && address.toLowerCase() === task.created_by.toLowerCase());
   const submissionNotice = getTaskSubmissionNotice(result);
 
   useEffect(() => {
@@ -111,6 +114,21 @@ function TaskDetailContent() {
     } finally {
       setAuthorizingWorker(false);
     }
+  }
+
+  async function deleteCreatedTask() {
+    if (!task || !isWorkerAuthorized || !isCreator || deletingTask) return;
+    const confirmed = window.confirm(`Delete “${task.title}”? A pristine open V1 task is permanently deleted. Tasks with submissions or payment history are archived. Tasks with unresolved payments or active or unsettled V2 escrow are blocked. No blockchain transaction will be sent.`);
+    if (!confirmed) return;
+    setDeletingTask(true); setAuthorizationError("");
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Task deletion failed");
+      router.push("/dashboard");
+    } catch (error) {
+      setAuthorizationError(error instanceof Error ? error.message : "Task deletion failed");
+    } finally { setDeletingTask(false); }
   }
 
   useEffect(() => {
@@ -288,8 +306,6 @@ function TaskDetailContent() {
   }
 
   const isOpen = task.status === "open" || Boolean(pendingClaim) || Boolean(result?.requiresReconciliation);
-  const isCreator = Boolean(address && isAddress(address, { strict: false }) && isAddress(task.created_by, { strict: false }) && address.toLowerCase() === task.created_by.toLowerCase());
-
   return (
     <main className="doit-shell">
       <div>
@@ -364,7 +380,10 @@ function TaskDetailContent() {
             <div className="task-closed-state">
               <span className="eyebrow">CREATOR WALLET</span>
               <h2>You created this task.</h2>
-              <p>Connect a different wallet to participate.</p>
+              <p>Creator wallets cannot submit answers to their own tasks.</p>
+              {!isWorkerAuthorized && <button className="task-submit-button" type="button" disabled={authorizingWorker || deletingTask} onClick={authorizeWorkerWallet}>{authorizingWorker ? "VERIFYING WALLET…" : "AUTHORIZE TO MANAGE TASK"}</button>}
+              {isWorkerAuthorized && <button className="task-submit-button" type="button" disabled={deletingTask} onClick={() => void deleteCreatedTask()}>{deletingTask ? "DELETING…" : "DELETE TASK"}</button>}
+              {authorizationError && <p role="alert" className="task-result-error">{authorizationError}</p>}
             </div>
           ) : isOpen ? (
             <form onSubmit={handleSubmit}>
