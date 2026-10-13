@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useAccount, useSignMessage } from "wagmi";
 import { isAddress } from "viem";
 import { getWorkerSessionChallengeMessage } from "@/lib/worker-session-auth";
-import { BULK_TASK_MAX_FILE_BYTES, BULK_TASK_MAX_ROWS, BulkTaskRow, csvEscape, parseBulkTaskCsv, ParsedBulkRow } from "@/lib/bulk-task-csv";
+import { BULK_TASK_MAX_FILE_BYTES, BULK_TASK_MAX_ROWS, BulkTaskRow, csvEscape, isValidRewardAmount, parseBulkTaskCsv, ParsedBulkRow } from "@/lib/bulk-task-csv";
 
 function validateRows(rows: ParsedBulkRow[]) {
   const seen = new Map<string, number>();
@@ -14,7 +14,7 @@ function validateRows(rows: ParsedBulkRow[]) {
     const task = item.task; const errors: string[] = [];
     if (task.title.trim().length < 3 || task.title.trim().length > 120) errors.push("Title must be 3–120 characters");
     if (task.description.trim().length < 10 || task.description.trim().length > 10000) errors.push("Description must be 10–10,000 characters");
-    if (!/^\d+(?:\.\d{1,6})?$/.test(task.reward_usdc.trim()) || !Number.isFinite(Number(task.reward_usdc)) || Number(task.reward_usdc) <= 0) errors.push("Reward must be a positive USDC amount with up to 6 decimals");
+    if (!isValidRewardAmount(task.reward_usdc)) errors.push("Reward must be a positive supported USDC amount with up to 6 decimals");
     if (!task.correct_answer.trim() || task.correct_answer.length > 1000) errors.push("Expected answer must be 1–1,000 characters");
     const key = [task.title, task.description, task.reward_usdc, task.correct_answer].map((v) => v.trim().toLowerCase()).join("\u0000");
     const duplicateOf = seen.get(key);

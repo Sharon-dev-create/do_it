@@ -3,6 +3,17 @@ export type ParsedBulkRow = { rowNumber: number; task: BulkTaskRow; errors: stri
 const HEADERS = ["title", "description", "reward_usdc", "correct_answer"];
 export const BULK_TASK_MAX_ROWS = 250;
 export const BULK_TASK_MAX_FILE_BYTES = 2 * 1024 * 1024;
+const MAX_REWARD_UNITS = 99_999_999_999_999_999_999n;
+
+export function isValidRewardAmount(input: string) {
+  const amount = input.trim();
+  if (!/^\d+(?:\.\d{1,6})?$/.test(amount)) return false;
+  const [whole, fraction = ""] = amount.split(".");
+  try {
+    const units = BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0") || "0");
+    return units > 0n && units <= MAX_REWARD_UNITS;
+  } catch { return false; }
+}
 
 function csvRecords(input: string): string[][] {
   const records: string[][] = [];
@@ -41,7 +52,7 @@ export function parseBulkTaskCsv(input: string): ParsedBulkRow[] {
     if (record.length !== HEADERS.length) errors.push("Expected exactly 4 columns");
     if (task.title.trim().length < 3 || task.title.trim().length > 120) errors.push("Title must be 3–120 characters");
     if (task.description.trim().length < 10 || task.description.trim().length > 10000) errors.push("Description must be 10–10,000 characters");
-    if (!/^\d+(?:\.\d{1,6})?$/.test(task.reward_usdc.trim()) || Number(task.reward_usdc) <= 0) errors.push("Reward must be a positive USDC amount with up to 6 decimals");
+    if (!isValidRewardAmount(task.reward_usdc)) errors.push("Reward must be a positive supported USDC amount with up to 6 decimals");
     if (!task.correct_answer.trim() || task.correct_answer.length > 1000) errors.push("Expected answer must be 1–1,000 characters");
     const key = identity(task);
     const duplicateOf = seen.get(key);
