@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { decodeEventLog, isAddress, isHex } from "viem";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { ARC_CHAIN_ID, escrowPublicClient } from "@/lib/escrow-v2-server";
-import { verifyWorkerWithdrawalChallenge } from "@/lib/worker-withdrawal-auth";
+import { isConfirmedWorkerWithdrawalReceipt, verifyWorkerWithdrawalChallenge } from "@/lib/worker-withdrawal-auth";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const DEPLOYMENT_BLOCK = 66_340_107n;
@@ -68,7 +68,8 @@ async function indexConfirmedEvents(workerAddress: string, fromBlock: bigint, to
     try {
       verifiedEvent = decodeEventLog({ abi: DO_IT_ESCROW_ABI, data: receiptLog.data, topics: receiptLog.topics, eventName: "EarningsWithdrawn" });
     } catch { continue; }
-    if (verifiedEvent.args.worker.toLowerCase() !== workerAddress || verifiedEvent.args.amount !== log.args.amount) continue;
+    if (verifiedEvent.args.worker.toLowerCase() !== workerAddress || verifiedEvent.args.amount !== log.args.amount ||
+        !isConfirmedWorkerWithdrawalReceipt(receipt.status, true)) continue;
 
     const blockKey = log.blockNumber.toString();
     let blockTimestamp = blockTimes.get(blockKey);

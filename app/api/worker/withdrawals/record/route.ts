@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { decodeEventLog, isHash } from "viem";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { ARC_CHAIN_ID, escrowPublicClient } from "@/lib/escrow-v2-server";
+import { isConfirmedWorkerWithdrawalReceipt } from "@/lib/worker-withdrawal-auth";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
         }
       } catch { /* Ignore unrelated escrow logs. */ }
     }
-    if (!matchingEvents.length) {
+    if (!isConfirmedWorkerWithdrawalReceipt(receipt.status, matchingEvents.length > 0)) {
       return NextResponse.json({ error: "Successful receipt did not contain a matching EarningsWithdrawn event" }, { status: 409 });
     }
 

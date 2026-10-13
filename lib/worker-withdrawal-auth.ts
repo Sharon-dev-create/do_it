@@ -43,6 +43,10 @@ export function isConfirmedWorkerWithdrawal(status: string) {
   return status === "confirmed";
 }
 
+export function isConfirmedWorkerWithdrawalReceipt(receiptStatus: string, hasVerifiedEvent: boolean) {
+  return receiptStatus === "success" && hasVerifiedEvent;
+}
+
 export function getWorkerWithdrawalEventKey(event: {
   chainId: number;
   contractAddress: string;
