@@ -1,20 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { decodeEventLog, formatUnits, isAddress, parseUnits } from "viem";
 import { useAccount, useReadContract, usePublicClient, useWriteContract } from "wagmi";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
+import { getWorkerWithdrawalEventKey, meetsWorkerWithdrawalMinimum } from "@/lib/worker-withdrawal-auth";
 
 const explorer = "https://testnet.arcscan.app";
+const ARC_TESTNET_CHAIN_ID = 5042002;
+const PAGE_SIZE = 25;
+
+type WithdrawalHistoryItem = {
+  worker_address: string;
+  amount_base_units: string;
+  chain_id: number;
+  contract_address: string;
+  tx_hash: string;
+  log_index: number;
+  block_number: string;
+  block_timestamp: string;
+  status: string;
+  confirmed_at: string;
+};
+
+type HistoryCursor = { blockNumber: string; logIndex: number };
 
 export function EscrowEarnings() {
   const { address, chainId } = useAccount();
   const publicClient = usePublicClient();
+  const { signMessageAsync } = useSignMessage();
   const { writeContractAsync, isPending } = useWriteContract();
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
+  const [history, setHistory] = useState<WithdrawalHistoryItem[]>([]);
+  const [historyWallet, setHistoryWallet] = useState<string | null>(null);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [historyCursor, setHistoryCursor] = useState<HistoryCursor | null>(null);
+  const [scanBeforeBlock, setScanBeforeBlock] = useState<string | null>(null);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
   const { data: balance, isLoading, error: readError, refetch } = useReadContract({
     address: DO_IT_ESCROW_ADDRESS,
     abi: DO_IT_ESCROW_ABI,
@@ -23,10 +50,74 @@ export function EscrowEarnings() {
     query: { enabled: Boolean(address && chainId === 5042002), refetchInterval: 12_000, refetchOnWindowFocus: true },
   });
 
+  useEffect(() => {
+    setHistory([]);
+    setHistoryWallet(null);
+    setHistoryLoaded(false);
+    setHistoryCursor(null);
+    setScanBeforeBlock(null);
+    setHistoryHasMore(false);
+    setHistoryError("");
+  }, [address]);
+
+  async function loadHistoryPage(options: { cursor: HistoryCursor | null; scanBeforeBlock: string | null; reset: boolean }) {
+    if (!address || !isAddress(address, { strict: false })) {
+      setHistoryError("Connect a valid worker wallet to authorize history access.");
+      return;
+    }
+    const requestedWallet = address.toLowerCase();
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      const challengeResponse = await fetch("/api/worker/withdrawals/challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ worker_address: address }),
+      });
+      const challenge = await challengeResponse.json();
+      if (!challengeResponse.ok) throw new Error(challenge.error || "Could not authorize this wallet.");
+      const signature = await signMessageAsync({ message: challenge.message });
+      const response = await fetch("/api/worker/withdrawals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          worker_address: address,
+          nonce: challenge.nonce,
+          expires_at: challenge.expiresAt,
+          signature,
+          cursor: options.cursor,
+          scan_before_block: options.scanBeforeBlock,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load confirmed withdrawal history.");
+      const nextRows = data.withdrawals as WithdrawalHistoryItem[];
+      setHistory((current) => {
+        const base = options.reset || historyWallet?.toLowerCase() !== requestedWallet ? [] : current;
+        const rowsByKey = new Map(base.map((row) => [getWorkerWithdrawalEventKey({ chainId: row.chain_id, contractAddress: row.contract_address, transactionHash: row.tx_hash, logIndex: row.log_index }), row]));
+        for (const row of nextRows) {
+          rowsByKey.set(getWorkerWithdrawalEventKey({ chainId: row.chain_id, contractAddress: row.contract_address, transactionHash: row.tx_hash, logIndex: row.log_index }), row);
+        }
+        return [...rowsByKey.values()].sort((a, b) => BigInt(a.block_number) === BigInt(b.block_number)
+          ? b.log_index - a.log_index
+          : BigInt(a.block_number) > BigInt(b.block_number) ? -1 : 1);
+      });
+      setHistoryWallet(requestedWallet);
+      setHistoryLoaded(true);
+      setHistoryCursor(data.nextCursor ?? options.cursor);
+      setScanBeforeBlock(data.scanBeforeBlock ?? options.scanBeforeBlock);
+      setHistoryHasMore(Boolean(data.hasMore));
+    } catch (cause) {
+      setHistoryError(cause instanceof Error ? cause.message : "Unable to load withdrawal history.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
   async function withdraw() {
     setError(""); setTxHash(null);
     if (!address || !isAddress(address)) return setError("Connect a valid worker wallet first.");
-    if (chainId !== 5042002) return setError("Switch your wallet to Arc Testnet.");
+    if (chainId !== ARC_TESTNET_CHAIN_ID) return setError("Switch your wallet to Arc Testnet.");
     if (!publicClient) return setError("Arc Testnet RPC is unavailable.");
     let units: bigint;
     try { units = parseUnits(amount, 6); } catch { return setError("Enter a valid USDC amount with up to six decimals."); }
@@ -46,6 +137,24 @@ export function EscrowEarnings() {
         } catch { return false; }
       });
       if (!eventFound) throw new Error("Receipt did not contain the expected EarningsWithdrawn event.");
+      const recordResponse = await fetch("/api/worker/withdrawals/record", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transaction_hash: hash }),
+      });
+      if (recordResponse.ok) {
+        const recordData = await recordResponse.json();
+        const recorded = recordData.withdrawals as WithdrawalHistoryItem[];
+        if (historyLoaded && historyWallet?.toLowerCase() === address.toLowerCase()) {
+          setHistory((current) => {
+            const rows = new Map(current.map((row) => [getWorkerWithdrawalEventKey({ chainId: row.chain_id, contractAddress: row.contract_address, transactionHash: row.tx_hash, logIndex: row.log_index }), row]));
+            for (const row of recorded) rows.set(getWorkerWithdrawalEventKey({ chainId: row.chain_id, contractAddress: row.contract_address, transactionHash: row.tx_hash, logIndex: row.log_index }), row);
+            return [...rows.values()].sort((a, b) => BigInt(a.block_number) === BigInt(b.block_number)
+              ? b.log_index - a.log_index
+              : BigInt(a.block_number) > BigInt(b.block_number) ? -1 : 1);
+          });
+        }
+      }
       setAmount("");
       await refetch();
     } catch (cause) {
