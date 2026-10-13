@@ -4,6 +4,8 @@ import { createClient } from "@supabase/supabase-js";
 import { isConfiguredV2TestWorker } from "@/lib/escrow-v2-server";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { escrowPublicClient } from "@/lib/escrow-v2-server";
+import { getCreatorWallet } from "@/lib/creator-session";
+import { getVerifiedV2TerminalStatus } from "@/lib/v2-task-archive";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -49,13 +51,28 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin) return NextResponse.json({ error: "Request origin is invalid" }, { status: 403 });
-  const { getCreatorWallet } = await import("@/lib/creator-session");
   const wallet = await getCreatorWallet();
   if (!wallet) return NextResponse.json({ error: "Authorize your creator wallet first" }, { status: 401 });
   const { id } = await params;
   if (!UUID.test(id)) return NextResponse.json({ error: "Invalid task ID" }, { status: 400 });
   try {
-    const { data, error } = await supabase.rpc("delete_creator_task", { p_task_id: id, p_creator_wallet: wallet });
+    const { data: task, error: taskError } = await supabase.from("tasks")
+      .select("id,created_by,contract_version,status,blockchain_task_id,reward_usdc,create_tx_hash,fund_tx_hash")
+      .eq("id", id).maybeSingle();
+    if (taskError) throw taskError;
+    if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    if (task.created_by.toLowerCase() !== wallet.toLowerCase()) return NextResponse.json({ error: "You do not own this task" }, { status: 403 });
+
+    let v2ChainStatus: 3 | 4 | null = null;
+    if (task.contract_version === "v2") {
+      const { data: payment, error: paymentError } = await supabase.from("task_payments")
+        .select("status,payment_mechanism,tx_hash,worker_address").eq("task_id", id).maybeSingle();
+      if (paymentError) throw paymentError;
+      v2ChainStatus = await getVerifiedV2TerminalStatus(task, payment);
+    }
+    const { data, error } = await supabase.rpc("delete_creator_task", {
+      p_task_id: id, p_creator_wallet: wallet, p_v2_chain_status: v2ChainStatus,
+    });
     if (error) throw error;
     const outcome = (data as { outcome?: string } | null)?.outcome;
     if (outcome === "not_found") return NextResponse.json({ error: "Task not found" }, { status: 404 });
