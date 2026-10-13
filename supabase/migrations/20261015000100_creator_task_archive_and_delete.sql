@@ -1,5 +1,26 @@
 alter table public.tasks
-  add column if not exists archived_at timestamptz;
+  add column if not exists archived_at timestamptz,
+  add column if not exists creation_batch_id uuid,
+  add column if not exists creation_row_number integer;
+
+create table if not exists public.task_creation_batches (
+  id uuid primary key,
+  creator_wallet text not null check (creator_wallet ~ '^0x[0-9a-f]{40}$'),
+  payload_hash text not null check (payload_hash ~ '^[0-9a-f]{64}$'),
+  row_count integer not null check (row_count between 1 and 250),
+  created_at timestamptz not null default now()
+);
+
+alter table public.tasks
+  add constraint tasks_creation_batch_fk foreign key (creation_batch_id)
+    references public.task_creation_batches(id) on delete restrict;
+
+create unique index if not exists tasks_creation_batch_row_unique
+  on public.tasks(creation_batch_id, creation_row_number)
+  where creation_batch_id is not null;
+
+alter table public.task_creation_batches enable row level security;
+revoke all on public.task_creation_batches from anon, authenticated;
 
 create index if not exists tasks_open_unarchived_created_at_idx
   on public.tasks(created_at desc)
@@ -97,3 +118,66 @@ revoke all on function public.delete_creator_task(uuid, text) from public, anon,
 revoke all on function public.delete_creator_tasks(uuid[], text) from public, anon, authenticated;
 grant execute on function public.delete_creator_task(uuid, text) to service_role;
 grant execute on function public.delete_creator_tasks(uuid[], text) to service_role;
+
+create or replace function public.create_creator_task_batch(
+  p_batch_id uuid,
+  p_creator_wallet text,
+  p_payload_hash text,
+  p_tasks jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  batch_row public.task_creation_batches%rowtype;
+  task_total integer;
+  batch_tasks jsonb;
+begin
+  if p_batch_id is null or p_creator_wallet is null or p_creator_wallet !~ '^0x[0-9a-f]{40}$' or
+     p_payload_hash !~ '^[0-9a-f]{64}$' or jsonb_typeof(p_tasks) <> 'array' then
+    raise exception 'Invalid task batch metadata';
+  end if;
+  task_total := jsonb_array_length(p_tasks);
+  if task_total < 1 or task_total > 250 then
+    raise exception 'Batch must contain between 1 and 250 tasks';
+  end if;
+
+  insert into public.task_creation_batches(id, creator_wallet, payload_hash, row_count)
+  values (p_batch_id, p_creator_wallet, p_payload_hash, task_total)
+  on conflict (id) do nothing;
+  select * into batch_row from public.task_creation_batches where id = p_batch_id for update;
+
+  if batch_row.creator_wallet <> p_creator_wallet or batch_row.payload_hash <> p_payload_hash or batch_row.row_count <> task_total then
+    return jsonb_build_object('outcome', 'idempotency_conflict');
+  end if;
+
+  select count(*) into task_total from public.tasks where creation_batch_id = p_batch_id;
+  if task_total = 0 then
+    insert into public.tasks(
+      title, description, reward_usdc, correct_answer, created_by, status,
+      contract_version, creation_batch_id, creation_row_number
+    )
+    select
+      value->>'title', value->>'description', (value->>'reward_usdc')::numeric,
+      value->>'correct_answer', p_creator_wallet, 'open', 'v1', p_batch_id, ordinal::integer
+    from jsonb_array_elements(p_tasks) with ordinality as rows(value, ordinal);
+  elsif task_total <> batch_row.row_count then
+    return jsonb_build_object('outcome', 'incomplete_batch');
+  end if;
+
+  select jsonb_agg(jsonb_build_object(
+    'id', id, 'row_number', creation_row_number, 'title', title, 'description', description,
+    'reward_usdc', reward_usdc, 'status', status, 'contract_version', contract_version,
+    'created_at', created_at
+  ) order by creation_row_number)
+  into batch_tasks
+  from public.tasks where creation_batch_id = p_batch_id;
+
+  return jsonb_build_object('outcome', 'created', 'replayed', task_total > 0, 'tasks', coalesce(batch_tasks, '[]'::jsonb));
+end;
+$$;
+
+revoke all on function public.create_creator_task_batch(uuid, text, text, jsonb) from public, anon, authenticated;
+grant execute on function public.create_creator_task_batch(uuid, text, text, jsonb) to service_role;
