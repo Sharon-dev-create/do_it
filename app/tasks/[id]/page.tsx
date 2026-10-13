@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
@@ -8,7 +8,8 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, usePublicClient, useSignMessage, useWriteContract } from "wagmi";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { isAddress } from "viem";
-import { getTaskSubmissionMessage } from "@/lib/submission-auth";
+import { getWorkerSessionChallengeMessage } from "@/lib/worker-session-auth";
+import { postTaskAnswer } from "@/lib/task-submission-client";
 
 type Task = {
   id: string;
@@ -49,7 +50,67 @@ function TaskDetailContent() {
   const [answer, setAnswer] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<SubmitResult | null>(null);
-  const [pendingClaim, setPendingClaim] = useState<{ submissionId: string; paymentId: string; claimTxHash?: `0x${string}`; signature?: `0x${string}` } | null>(null);
+  const [pendingClaim, setPendingClaim] = useState<{ submissionId: string; paymentId: string; claimTxHash?: `0x${string}` } | null>(null);
+  const [authorizedWorker, setAuthorizedWorker] = useState<string | null>(null);
+  const [authorizingWorker, setAuthorizingWorker] = useState(false);
+  const [authorizationError, setAuthorizationError] = useState("");
+  const activeWallet = useRef(address?.toLowerCase() ?? null);
+  activeWallet.current = address?.toLowerCase() ?? null;
+  const isWorkerAuthorized = Boolean(address && authorizedWorker === address.toLowerCase());
+
+  useEffect(() => {
+    let cancelled = false;
+    setAuthorizedWorker(null);
+    setAuthorizationError("");
+    if (!address) return () => { cancelled = true; };
+    fetch("/api/worker/auth/session", { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() : { worker_address: null })
+      .then((data) => {
+        if (!cancelled && activeWallet.current === address.toLowerCase()) {
+          setAuthorizedWorker(typeof data.worker_address === "string" ? data.worker_address.toLowerCase() : null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAuthorizationError("Unable to check wallet authorization.");
+      });
+    return () => { cancelled = true; };
+  }, [address]);
+
+  async function authorizeWorkerWallet() {
+    if (!isConnected || !address || !isAddress(address, { strict: false })) {
+      setAuthorizationError("Connect a valid worker wallet before authorizing it.");
+      return;
+    }
+    const requestedWallet = address.toLowerCase();
+    setAuthorizingWorker(true);
+    setAuthorizationError("");
+    try {
+      const challengeResponse = await fetch("/api/worker/auth/challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ worker_address: address }),
+      });
+      const challenge = await challengeResponse.json();
+      if (!challengeResponse.ok) throw new Error(challenge.error || "Unable to start wallet authorization.");
+      if (activeWallet.current !== requestedWallet) return;
+      const signature = await signMessageAsync({ message: challenge.message });
+      if (activeWallet.current !== requestedWallet) return;
+      const verifyResponse = await fetch("/api/worker/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ worker_address: address, nonce: challenge.nonce, expires_at: challenge.expiresAt, signature }),
+      });
+      const verified = await verifyResponse.json();
+      if (!verifyResponse.ok) throw new Error(verified.error || "Wallet authorization failed.");
+      if (activeWallet.current === requestedWallet && verified.worker_address?.toLowerCase() === requestedWallet) {
+        setAuthorizedWorker(requestedWallet);
+      }
+    } catch (error) {
+      if (activeWallet.current === requestedWallet) setAuthorizationError(error instanceof Error ? error.message : "Wallet authorization failed.");
+    } finally {
+      setAuthorizingWorker(false);
+    }
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -101,6 +162,10 @@ function TaskDetailContent() {
       });
       return;
     }
+    if (!isWorkerAuthorized) {
+      setResult({ error: "Authorize this connected worker wallet before submitting." });
+      return;
+    }
     if (task?.contract_version === "v2" && chainId !== 5042002) {
       setResult({ error: "Switch your connected wallet to Arc Testnet before submitting a V2 task." });
       return;
@@ -110,21 +175,14 @@ function TaskDetailContent() {
     setResult(null);
 
     try {
-      const signature = await signMessageAsync({ message: getTaskSubmissionMessage(id, answer.trim()) });
-      const response = await fetch(`/api/tasks/${id}/submit`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          worker_address: address,
-          answer: answer.trim(),
-          worker_signature: signature,
-        }),
-      });
+      const response = await postTaskAnswer(id, { worker_address: address, answer: answer.trim() });
       const data = await response.json();
 
       if (!response.ok) {
+        if (response.status === 401) {
+          setAuthorizedWorker(null);
+          setAuthorizationError(data.error || "Authorize the connected wallet again.");
+        }
         setResult({
           error: data.error || "Submission failed.",
         });
@@ -132,9 +190,9 @@ function TaskDetailContent() {
       }
 
       if (data.requiresClaim && task?.contract_version === "v2") {
-        setPendingClaim({ submissionId: data.submissionId, paymentId: data.paymentId, signature });
+        setPendingClaim({ submissionId: data.submissionId, paymentId: data.paymentId });
         setResult({ correct: true, message: data.message });
-        await finalizeClaim(data.submissionId, signature);
+        await finalizeClaim(data.submissionId);
       } else {
         setResult(data);
       }
@@ -147,9 +205,13 @@ function TaskDetailContent() {
     }
   }
 
-  async function finalizeClaim(submissionId: string, authorizedSignature?: `0x${string}`) {
+  async function finalizeClaim(submissionId: string) {
     if (!task?.blockchain_task_id || !publicClient || !address) {
       setResult((current) => ({ ...current, error: "Arc Testnet wallet or task details are unavailable. Your accepted submission remains reserved." }));
+      return;
+    }
+    if (!isWorkerAuthorized) {
+      setResult((current) => ({ ...current, error: "Authorize this connected worker wallet before continuing the claim." }));
       return;
     }
     setSubmitting(true);
@@ -161,10 +223,12 @@ function TaskDetailContent() {
         if (receipt.status !== "success") throw new Error(`Claim transaction reverted: ${claimTxHash}`);
         setPendingClaim((current) => current ? { ...current, claimTxHash } : current);
       }
-      const signature = authorizedSignature || (pendingClaim?.submissionId === submissionId ? pendingClaim.signature : undefined) || await signMessageAsync({ message: getTaskSubmissionMessage(id, answer.trim()) });
-      setPendingClaim((current) => current ? { ...current, signature } : current);
-      const response = await fetch(`/api/tasks/${id}/submit`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ worker_address: address, answer: answer.trim(), worker_signature: signature, submission_id: submissionId, claim_tx_hash: claimTxHash }) });
+      const response = await postTaskAnswer(id, { worker_address: address, answer: answer.trim(), submission_id: submissionId, claim_tx_hash: claimTxHash });
       const data = await response.json();
+      if (response.status === 401) {
+        setAuthorizedWorker(null);
+        setAuthorizationError(data.error || "Authorize the connected wallet again.");
+      }
       setResult({ ...data, error: response.ok ? data.error : data.error || "Reward credit needs reconciliation." });
       if (data.credited) {
         setPendingClaim(null);
@@ -330,7 +394,7 @@ function TaskDetailContent() {
               )}
 
               {pendingClaim && (
-                <button className="task-submit-button" type="button" disabled={submitting || chainId !== 5042002} onClick={() => finalizeClaim(pendingClaim.submissionId, pendingClaim.signature)}>
+                <button className="task-submit-button" type="button" disabled={submitting || chainId !== 5042002 || !isWorkerAuthorized} onClick={() => finalizeClaim(pendingClaim.submissionId)}>
                   {submitting ? "WAITING FOR ARC..." : "CONTINUE: CLAIM ON ARC"}
                 </button>
               )}
@@ -344,6 +408,15 @@ function TaskDetailContent() {
                 <span className="eyebrow">CONNECTED WORKER</span>
                 <small>{isConnected && address && isAddress(address) ? address : "Connect your wallet above."}</small>
               </p>
+
+              {isConnected && address && !isWorkerAuthorized && <div className="task-field">
+                <button className="task-submit-button" type="button" disabled={authorizingWorker || submitting} onClick={authorizeWorkerWallet}>
+                  {authorizingWorker ? "VERIFYING WALLET…" : "AUTHORIZE WORKER WALLET"}
+                </button>
+                <small>Your wallet signature creates a short-lived session. Submitting an answer then uses the application API without another signature prompt.</small>
+                {authorizationError && <p role="alert" className="task-result-error">{authorizationError}</p>}
+              </div>}
+              {isWorkerAuthorized && <p className="task-field"><small>Worker wallet authorized for this browser session.</small></p>}
 
               <label className="task-field">
                 <span className="eyebrow">YOUR ANSWER</span>
@@ -360,7 +433,7 @@ function TaskDetailContent() {
               <button
                 className="task-submit-button"
                 type="submit"
-                disabled={submitting || Boolean(pendingClaim) || !isConnected || (task.contract_version === "v2" && chainId !== 5042002)}
+                disabled={submitting || Boolean(pendingClaim) || !isConnected || !isWorkerAuthorized || (task.contract_version === "v2" && chainId !== 5042002)}
               >
                 {submitting ? "VERIFYING / CLAIMING..." : "SUBMIT ANSWER"}
               </button>

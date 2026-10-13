@@ -13,6 +13,8 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 
 export async function POST(request: Request) {
   try {
+    const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!secret) return NextResponse.json({ error: "Worker session signing is unavailable" }, { status: 503 });
     const origin = request.headers.get("origin");
     if (origin && origin !== new URL(request.url).origin) {
       return NextResponse.json({ error: "Wallet authorization request origin is invalid" }, { status: 403 });
@@ -57,8 +59,6 @@ export async function POST(request: Request) {
     }
     if (!consumed) return NextResponse.json({ error: "Wallet authorization is invalid, expired, or already used" }, { status: 401 });
 
-    const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!secret) return NextResponse.json({ error: "Worker session signing is unavailable" }, { status: 503 });
     const expires = Math.floor(Date.now() / 1000) + WORKER_SESSION_TTL_SECONDS;
     const token = createWorkerSessionToken(workerAddress, expires, secret);
     const response = NextResponse.json({ worker_address: workerAddress, expires_at: new Date(expires * 1000).toISOString() }, { headers: { "Cache-Control": "no-store" } });

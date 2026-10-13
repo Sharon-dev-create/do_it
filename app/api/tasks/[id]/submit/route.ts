@@ -6,7 +6,7 @@ import { payWorker } from "@/lib/payout";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { ARC_CHAIN_ID, escrowPublicClient, getVerifierWalletClient, isConfiguredV2TestWorker, verifyV2TaskRecord } from "@/lib/escrow-v2-server";
 import { getTaskCreatorSubmissionError } from "@/lib/submission-auth";
-import { getWorkerAddressFromSessionToken, WORKER_SESSION_COOKIE } from "@/lib/worker-session-auth";
+import { getMatchingWorkerSessionAddress, WORKER_SESSION_COOKIE } from "@/lib/worker-session-auth";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -150,11 +150,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "A connected wallet and valid answer are required" }, { status: 400 });
     }
     const cookieStore = await cookies();
-    const worker = getWorkerAddressFromSessionToken(
+    const worker = getMatchingWorkerSessionAddress(
       cookieStore.get(WORKER_SESSION_COOKIE)?.value,
       process.env.SUPABASE_SERVICE_ROLE_KEY,
+      requestedWorker,
     );
-    if (!worker || worker !== requestedWorker.toLowerCase()) {
+    if (!worker) {
       return NextResponse.json({ error: "Authorize the connected worker wallet before submitting" }, { status: 401 });
     }
     const { data: task, error } = await supabase.from("tasks").select("*").eq("id", id).maybeSingle();

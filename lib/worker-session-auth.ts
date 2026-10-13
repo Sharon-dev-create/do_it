@@ -34,11 +34,22 @@ export function getWorkerAddressFromSessionToken(token: string | undefined, secr
   try {
     const payload = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8")) as { wallet?: unknown; exp?: unknown };
     if (typeof payload.wallet !== "string" || !isAddress(payload.wallet, { strict: false }) ||
-        typeof payload.exp !== "number" || !Number.isSafeInteger(payload.exp) || payload.exp <= now) return null;
+        typeof payload.exp !== "number" || !Number.isSafeInteger(payload.exp) || payload.exp * 1000 <= now) return null;
     return payload.wallet.toLowerCase();
   } catch {
     return null;
   }
+}
+
+export function getMatchingWorkerSessionAddress(
+  token: string | undefined,
+  secret: string | undefined,
+  requestedWallet: string,
+  now = Date.now(),
+) {
+  if (!isAddress(requestedWallet, { strict: false })) return null;
+  const sessionWallet = getWorkerAddressFromSessionToken(token, secret, now);
+  return sessionWallet && sessionWallet === requestedWallet.toLowerCase() ? sessionWallet : null;
 }
 
 export function isCurrentWorkerAuthChallenge(
