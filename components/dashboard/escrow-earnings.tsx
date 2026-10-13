@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { decodeEventLog, formatUnits, isAddress, parseUnits } from "viem";
-import { useAccount, useReadContract, usePublicClient, useWriteContract } from "wagmi";
+import { useAccount, useReadContract, usePublicClient, useSignMessage, useWriteContract } from "wagmi";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { getWorkerWithdrawalEventKey, meetsWorkerWithdrawalMinimum } from "@/lib/worker-withdrawal-auth";
 
@@ -137,24 +137,26 @@ export function EscrowEarnings() {
         } catch { return false; }
       });
       if (!eventFound) throw new Error("Receipt did not contain the expected EarningsWithdrawn event.");
-      const recordResponse = await fetch("/api/worker/withdrawals/record", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transaction_hash: hash }),
-      });
-      if (recordResponse.ok) {
-        const recordData = await recordResponse.json();
-        const recorded = recordData.withdrawals as WithdrawalHistoryItem[];
-        if (historyLoaded && historyWallet?.toLowerCase() === address.toLowerCase()) {
-          setHistory((current) => {
-            const rows = new Map(current.map((row) => [getWorkerWithdrawalEventKey({ chainId: row.chain_id, contractAddress: row.contract_address, transactionHash: row.tx_hash, logIndex: row.log_index }), row]));
-            for (const row of recorded) rows.set(getWorkerWithdrawalEventKey({ chainId: row.chain_id, contractAddress: row.contract_address, transactionHash: row.tx_hash, logIndex: row.log_index }), row);
-            return [...rows.values()].sort((a, b) => BigInt(a.block_number) === BigInt(b.block_number)
-              ? b.log_index - a.log_index
-              : BigInt(a.block_number) > BigInt(b.block_number) ? -1 : 1);
-          });
+      try {
+        const recordResponse = await fetch("/api/worker/withdrawals/record", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transaction_hash: hash }),
+        });
+        if (recordResponse.ok) {
+          const recordData = await recordResponse.json();
+          const recorded = recordData.withdrawals as WithdrawalHistoryItem[];
+          if (historyLoaded && historyWallet?.toLowerCase() === address.toLowerCase()) {
+            setHistory((current) => {
+              const rows = new Map(current.map((row) => [getWorkerWithdrawalEventKey({ chainId: row.chain_id, contractAddress: row.contract_address, transactionHash: row.tx_hash, logIndex: row.log_index }), row]));
+              for (const row of recorded) rows.set(getWorkerWithdrawalEventKey({ chainId: row.chain_id, contractAddress: row.contract_address, transactionHash: row.tx_hash, logIndex: row.log_index }), row);
+              return [...rows.values()].sort((a, b) => BigInt(a.block_number) === BigInt(b.block_number)
+                ? b.log_index - a.log_index
+                : BigInt(a.block_number) > BigInt(b.block_number) ? -1 : 1);
+            });
+          }
         }
-      }
+      } catch { console.error("Verified withdrawal will be indexed the next time history is loaded."); }
       setAmount("");
       await refetch();
     } catch (cause) {
