@@ -11,6 +11,7 @@ create table if not exists public.task_creation_batches (
   created_at timestamptz not null default now()
 );
 
+alter table public.tasks drop constraint if exists tasks_creation_batch_fk;
 alter table public.tasks
   add constraint tasks_creation_batch_fk foreign key (creation_batch_id)
     references public.task_creation_batches(id) on delete restrict;
@@ -136,7 +137,7 @@ declare
   batch_tasks jsonb;
 begin
   if p_batch_id is null or p_creator_wallet is null or p_creator_wallet !~ '^0x[0-9a-f]{40}$' or
-     p_payload_hash !~ '^[0-9a-f]{64}$' or jsonb_typeof(p_tasks) <> 'array' then
+     p_payload_hash is null or p_payload_hash !~ '^[0-9a-f]{64}$' or p_tasks is null or jsonb_typeof(p_tasks) <> 'array' then
     raise exception 'Invalid task batch metadata';
   end if;
   task_total := jsonb_array_length(p_tasks);
