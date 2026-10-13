@@ -6,6 +6,8 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function POST(request: Request) {
+  const origin = request.headers.get("origin");
+  if (origin && origin !== new URL(request.url).origin) return NextResponse.json({ error: "Request origin is invalid" }, { status: 403 });
   const wallet = await getCreatorWallet();
   if (!wallet) return NextResponse.json({ error: "Authorize your creator wallet first" }, { status: 401 });
   let body: unknown;

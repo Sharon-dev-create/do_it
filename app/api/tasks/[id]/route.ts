@@ -46,7 +46,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const origin = request.headers.get("origin");
+  if (origin && origin !== new URL(request.url).origin) return NextResponse.json({ error: "Request origin is invalid" }, { status: 403 });
   const { getCreatorWallet } = await import("@/lib/creator-session");
   const wallet = await getCreatorWallet();
   if (!wallet) return NextResponse.json({ error: "Authorize your creator wallet first" }, { status: 401 });

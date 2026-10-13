@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { isAddress } from "viem";
 import { getCreatorWallet } from "@/lib/creator-session";
 import { isValidBulkTask } from "@/lib/bulk-task-validation";
+import { BULK_TASK_MAX_FILE_BYTES } from "@/lib/bulk-task-csv";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -20,6 +21,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Provide a valid batch ID and 1 to 250 tasks" }, { status: 400 });
   }
   if (!input.tasks.every(isValidBulkTask)) return NextResponse.json({ error: "One or more rows have invalid fields" }, { status: 400 });
+  if (Buffer.byteLength(JSON.stringify(input.tasks), "utf8") > BULK_TASK_MAX_FILE_BYTES) return NextResponse.json({ error: "Task batch payload exceeds 2 MB" }, { status: 413 });
   const tasks = input.tasks.map((row) => ({
     title: row.title.trim(), description: row.description.trim(), reward_usdc: row.reward_usdc.trim(), correct_answer: row.correct_answer.trim(),
   }));
