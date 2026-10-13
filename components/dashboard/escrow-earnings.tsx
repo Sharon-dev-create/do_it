@@ -214,7 +214,7 @@ export function EscrowEarnings() {
           ? <button type="button" onClick={() => loadHistoryPage({ cursor: null, scanBeforeBlock: null, reset: true })} disabled={!address || historyLoading} className="rounded-md border px-3 py-2 text-sm disabled:opacity-50">{historyLoading ? "Verifying wallet…" : "Verify wallet and load history"}</button>
           : historyHasMore && <button type="button" onClick={() => loadHistoryPage({ cursor: historyCursor, scanBeforeBlock, reset: false })} disabled={historyLoading} className="rounded-md border px-3 py-2 text-sm disabled:opacity-50">{historyLoading ? "Loading…" : "Load older history"}</button>}
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">A wallet signature authorizes a read of this wallet’s history only. Recent withdrawals may take 12 blocks to appear; this delay does not guarantee finality against later chain reorganizations.</p>
+      <p className="mt-1 text-xs text-muted-foreground">A wallet signature authorizes a read of this wallet’s history only. Event indexing scans stop 12 blocks behind the chain head. Receipts are checked against the current canonical block when recorded, but later reorganizations are not automatically reconciled.</p>
       {historyError && <p role="alert" className="mt-3 text-sm text-red-600">{historyError}</p>}
       {historyLoaded && historyWallet?.toLowerCase() === address?.toLowerCase() && (
         history.length ? <ul className="mt-3 divide-y rounded-md border">
