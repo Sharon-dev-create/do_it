@@ -21,17 +21,18 @@ export async function POST(request: Request) {
     const normalizedAddress = workerAddress.toLowerCase();
 
     await supabase.from("worker_withdrawal_auth_challenges").delete().lt("expires_at", now.toISOString());
-    const { error } = await supabase.from("worker_withdrawal_auth_challenges").insert({
+    const { data: savedChallenge, error } = await supabase.from("worker_withdrawal_auth_challenges").insert({
       nonce,
       worker_address: normalizedAddress,
       expires_at: expiresAt,
-    });
-    if (error) return NextResponse.json({ error: "Unable to create a wallet authorization challenge" }, { status: 500 });
+    }).select("expires_at").single();
+    if (error || !savedChallenge) return NextResponse.json({ error: "Unable to create a wallet authorization challenge" }, { status: 500 });
+    const savedExpiry = savedChallenge.expires_at;
 
     return NextResponse.json({
       nonce,
-      expiresAt,
-      message: getWorkerWithdrawalChallengeMessage(normalizedAddress, nonce, expiresAt),
+      expiresAt: savedExpiry,
+      message: getWorkerWithdrawalChallengeMessage(normalizedAddress, nonce, savedExpiry),
     });
   } catch {
     return NextResponse.json({ error: "Unable to create a wallet authorization challenge" }, { status: 500 });
