@@ -89,7 +89,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const { data, error } = await supabase.from("tasks").select(PUBLIC_TASK_FIELDS).eq("status", "open").order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("tasks").select(PUBLIC_TASK_FIELDS).eq("status", "open").is("archived_at", null).order("created_at", { ascending: false });
     if (error) throw error;
     return NextResponse.json({ tasks: data });
   } catch {

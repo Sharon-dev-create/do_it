@@ -160,6 +160,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
     const { data: task, error } = await supabase.from("tasks").select("*").eq("id", id).maybeSingle();
     if (error || !task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    if (task.archived_at) return NextResponse.json({ error: "This task is archived and cannot accept submissions" }, { status: 410 });
     const creatorError = getTaskCreatorSubmissionError(task.created_by, worker);
     if (creatorError === "invalid_creator") {
       return NextResponse.json({ error: "Task creator metadata is invalid" }, { status: 500 });

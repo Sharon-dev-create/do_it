@@ -13,10 +13,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!UUID.test(id)) return NextResponse.json({ error: "Invalid task ID" }, { status: 400 });
   try {
     const { data, error } = await supabase.from("tasks").select(
-      "id, title, description, reward_usdc, created_by, status, created_at, blockchain_task_id, create_tx_hash, fund_tx_hash, contract_version",
+      "id, title, description, reward_usdc, created_by, status, created_at, blockchain_task_id, create_tx_hash, fund_tx_hash, contract_version, archived_at",
     ).eq("id", id).maybeSingle();
     if (error) throw error;
     if (!data) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    if ((data as typeof data & { archived_at?: string | null }).archived_at) return NextResponse.json({ error: "Task not found" }, { status: 404 });
     if (typeof data.created_by !== "string" || !isAddress(data.created_by)) {
       return NextResponse.json({ error: "Task metadata is invalid" }, { status: 500 });
     }
@@ -42,5 +43,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ task: data, pendingRewardFlow, v2TestingRestriction: data.contract_version === "v2" });
   } catch {
     return NextResponse.json({ error: "Failed to fetch task" }, { status: 500 });
+  }
+}
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { getCreatorWallet } = await import("@/lib/creator-session");
+  const wallet = await getCreatorWallet();
+  if (!wallet) return NextResponse.json({ error: "Authorize your creator wallet first" }, { status: 401 });
+  const { id } = await params;
+  if (!UUID.test(id)) return NextResponse.json({ error: "Invalid task ID" }, { status: 400 });
+  try {
+    const { data, error } = await supabase.rpc("delete_creator_task", { p_task_id: id, p_creator_wallet: wallet });
+    if (error) throw error;
+    const outcome = (data as { outcome?: string } | null)?.outcome;
+    if (outcome === "not_found") return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    if (outcome === "forbidden") return NextResponse.json({ error: "You do not own this task" }, { status: 403 });
+    if (outcome === "blocked") return NextResponse.json({ error: (data as { reason?: string }).reason ?? "Task cannot be deleted in its current state" }, { status: 409 });
+    if (!["deleted", "archived", "already_archived"].includes(outcome ?? "")) throw new Error("Unexpected deletion result");
+    return NextResponse.json({ task_id: id, outcome, permanent: outcome === "deleted" });
+  } catch {
+    return NextResponse.json({ error: "Unable to delete this task" }, { status: 503 });
   }
 }
