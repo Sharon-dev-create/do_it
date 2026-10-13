@@ -91,13 +91,21 @@ async function submitV2(task: V2TaskRecord, taskId: string, worker: string, answ
   if (onchain.status !== 1) return NextResponse.json({ error: "V2 task is no longer funded and available on-chain" }, { status: 409 });
   const isCorrect = answer.trim().toLocaleLowerCase() === String(task.correct_answer ?? "").trim().toLocaleLowerCase();
   if (!isCorrect) {
-    const { data: rejected, error } = await supabase.from("submissions").insert({ task_id: task.id, worker_address: worker, answer, is_correct: false, status: "rejected", verified_at: time() }).select("id, task_id, worker_address, is_correct, status, created_at").single();
+    const { data: result, error } = await supabase.rpc("record_rejected_task_submission", {
+      p_task_id: task.id,
+      p_worker_address: worker,
+      p_answer: answer,
+    });
     if (error) return NextResponse.json({ error: "Failed to record rejected submission" }, { status: 500 });
-    return NextResponse.json({ correct: false, submission: rejected, message: "Incorrect answer" });
+    if (result?.outcome === "archived") return NextResponse.json({ error: "This task is archived and cannot accept submissions" }, { status: 410 });
+    if (result?.outcome === "closed") return NextResponse.json({ error: "Task is no longer open" }, { status: 409 });
+    if (result?.outcome !== "recorded") return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    return NextResponse.json({ correct: false, submission: result.submission, message: "Incorrect answer" });
   }
 
-  const { data: reserved } = await supabase.from("tasks").update({ status: "claimed", updated_at: time() }).eq("id", task.id).eq("status", "open").select("id").maybeSingle();
-  if (!reserved) return NextResponse.json({ error: "Task is already claimed or completed" }, { status: 409 });
+  const { data: reserved, error: reserveError } = await supabase.from("tasks").update({ status: "claimed", updated_at: time() }).eq("id", task.id).eq("status", "open").is("archived_at", null).select("id").maybeSingle();
+  if (reserveError) return NextResponse.json({ error: "Unable to reserve this task" }, { status: 500 });
+  if (!reserved) return NextResponse.json({ error: "Task is archived, already claimed, or completed" }, { status: 409 });
   const { data: submission, error: submissionError } = await supabase.from("submissions").insert({ task_id: task.id, worker_address: worker, answer, is_correct: true, status: "approved", verified_at: time() }).select("id, task_id, worker_address, is_correct, status, created_at").single();
   if (submissionError) {
     await supabase.from("tasks").update({ status: "open", updated_at: time() }).eq("id", task.id).eq("status", "claimed");
@@ -115,12 +123,20 @@ async function submitV1(task: Record<string, any>, worker: string, answer: strin
   if (task.status !== "open") return NextResponse.json({ error: "Task is no longer open" }, { status: 409 });
   const isCorrect = answer.trim().toLowerCase() === String(task.correct_answer ?? "").trim().toLowerCase();
   if (!isCorrect) {
-    const { data, error } = await supabase.from("submissions").insert({ task_id: task.id, worker_address: worker, answer, is_correct: false, status: "rejected", verified_at: time() }).select("id, task_id, worker_address, is_correct, status, created_at").single();
+    const { data: result, error } = await supabase.rpc("record_rejected_task_submission", {
+      p_task_id: task.id,
+      p_worker_address: worker,
+      p_answer: answer,
+    });
     if (error) return NextResponse.json({ error: "Failed to record submission" }, { status: 500 });
-    return NextResponse.json({ correct: false, submission: data, message: "Incorrect answer" });
+    if (result?.outcome === "archived") return NextResponse.json({ error: "This task is archived and cannot accept submissions" }, { status: 410 });
+    if (result?.outcome === "closed") return NextResponse.json({ error: "Task is no longer open" }, { status: 409 });
+    if (result?.outcome !== "recorded") return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    return NextResponse.json({ correct: false, submission: result.submission, message: "Incorrect answer" });
   }
-  const { data: claimed } = await supabase.from("tasks").update({ status: "completed", updated_at: time() }).eq("id", task.id).eq("status", "open").select("id").maybeSingle();
-  if (!claimed) return NextResponse.json({ error: "Task has already been claimed" }, { status: 409 });
+  const { data: claimed, error: claimError } = await supabase.from("tasks").update({ status: "completed", updated_at: time() }).eq("id", task.id).eq("status", "open").is("archived_at", null).select("id").maybeSingle();
+  if (claimError) return NextResponse.json({ error: "Unable to reserve this task" }, { status: 500 });
+  if (!claimed) return NextResponse.json({ error: "Task is archived or has already been claimed" }, { status: 409 });
   const { data: submission, error: submissionError } = await supabase.from("submissions").insert({ task_id: task.id, worker_address: worker, answer, is_correct: true, status: "approved", verified_at: time() }).select().single();
   if (submissionError) return NextResponse.json({ error: "Task reserved but submission metadata needs repair" }, { status: 500 });
   const { data: payment, error: paymentError } = await supabase.from("task_payments").insert({ task_id: task.id, submission_id: submission.id, worker_address: worker, amount_usdc: task.reward_usdc, status: "pending", payment_mechanism: "circle_gateway" }).select().single();

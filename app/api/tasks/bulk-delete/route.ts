@@ -40,6 +40,6 @@ export async function POST(request: Request) {
     const success = outcomes.filter((item: { outcome?: string }) => ["deleted", "archived", "already_archived"].includes(item.outcome ?? "")).length;
     return NextResponse.json({ results: outcomes, succeeded: success, failed: ids.length - success }, { status: success === ids.length ? 200 : 207 });
   } catch {
-    return NextResponse.json({ error: "Bulk deletion failed without applying any task changes" }, { status: 503 });
+    return NextResponse.json({ error: "Unable to confirm the bulk deletion result. Refresh the task list before retrying." }, { status: 503 });
   }
 }
