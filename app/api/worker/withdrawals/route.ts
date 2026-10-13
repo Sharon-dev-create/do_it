@@ -3,35 +3,30 @@ import { createClient } from "@supabase/supabase-js";
 import { decodeEventLog, isAddress, isHex } from "viem";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { ARC_CHAIN_ID, escrowPublicClient } from "@/lib/escrow-v2-server";
-import { isConfirmedWorkerWithdrawalReceipt, verifyWorkerWithdrawalChallenge } from "@/lib/worker-withdrawal-auth";
+import {
+  isConfirmedWorkerWithdrawalReceipt,
+  isValidWorkerWithdrawalDeployment,
+  isWorkerWithdrawalChallengeCurrent,
+  parseWorkerWithdrawalPageCursor,
+  parseWorkerWithdrawalScanCursor,
+  verifyWorkerWithdrawalChallenge,
+} from "@/lib/worker-withdrawal-auth";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const DEPLOYMENT_BLOCK = 66_340_107n;
 const BLOCKS_PER_CHUNK = 2_000n;
 const MAX_BLOCKS_PER_REQUEST = 20_000n;
+const INDEXING_CONFIRMATIONS = 12n;
 const PAGE_SIZE = 25;
 
-type PageCursor = { blockNumber: string; logIndex: number };
-
-function parsePageCursor(value: unknown): PageCursor | null | undefined {
-  if (value === undefined || value === null) return null;
-  if (!value || typeof value !== "object") return undefined;
-  const cursor = value as Record<string, unknown>;
-  if (typeof cursor.blockNumber !== "string" || !/^\d{1,20}$/.test(cursor.blockNumber) ||
-      typeof cursor.logIndex !== "number" || !Number.isSafeInteger(cursor.logIndex) || cursor.logIndex < 0) return undefined;
-  return { blockNumber: cursor.blockNumber, logIndex: cursor.logIndex };
-}
-
-function parseScanCursor(value: unknown): bigint | null | undefined {
-  if (value === undefined || value === null) return null;
-  if (typeof value !== "string" || !/^\d{1,20}$/.test(value)) return undefined;
-  try { return BigInt(value); } catch { return undefined; }
-}
+type PageCursor = NonNullable<ReturnType<typeof parseWorkerWithdrawalPageCursor>>;
 
 async function getHistoryPage(workerAddress: string, cursor: PageCursor | null) {
   let query = supabase.from("worker_escrow_withdrawals")
     .select("worker_address, amount_base_units, chain_id, contract_address, tx_hash, log_index, block_number, block_timestamp, status, confirmed_at")
     .eq("worker_address", workerAddress)
+    .eq("chain_id", ARC_CHAIN_ID)
+    .eq("contract_address", DO_IT_ESCROW_ADDRESS.toLowerCase())
     .eq("status", "confirmed");
   if (cursor) {
     query = query.or(`block_number.lt.${cursor.blockNumber},and(block_number.eq.${cursor.blockNumber},log_index.lt.${cursor.logIndex})`);
@@ -104,26 +99,49 @@ async function indexConfirmedEvents(workerAddress: string, fromBlock: bigint, to
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "A valid wallet authorization is required" }, { status: 400 });
+    }
     const workerAddressInput = body?.worker_address;
     const nonce = body?.nonce;
     const expiresAt = body?.expires_at;
     const signature = body?.signature;
     if (typeof workerAddressInput !== "string" || !isAddress(workerAddressInput, { strict: false }) ||
         typeof nonce !== "string" || !/^[0-9a-f]{64}$/.test(nonce) ||
-        typeof expiresAt !== "string" || typeof signature !== "string" || !isHex(signature)) {
+        typeof expiresAt !== "string" || !Number.isFinite(Date.parse(expiresAt)) ||
+        typeof signature !== "string" || !/^0x[0-9a-fA-F]{130}$/.test(signature) || !isHex(signature)) {
       return NextResponse.json({ error: "A valid wallet authorization is required" }, { status: 400 });
     }
+    const cursor = parseWorkerWithdrawalPageCursor(body.cursor);
+    const requestedScanBlock = parseWorkerWithdrawalScanCursor(body.scan_before_block);
+    if (cursor === undefined || requestedScanBlock === undefined) return NextResponse.json({ error: "Invalid history pagination cursor" }, { status: 400 });
+
+    if (!isValidWorkerWithdrawalDeployment(DO_IT_ESCROW_ADDRESS, ARC_CHAIN_ID, 5042002)) {
+      return NextResponse.json({ error: "V2 escrow deployment is misconfigured" }, { status: 503 });
+    }
+    const chainId = await escrowPublicClient.getChainId();
+    if (chainId !== ARC_CHAIN_ID) return NextResponse.json({ error: "Arc Testnet RPC is misconfigured" }, { status: 503 });
+    const latestBlock = await escrowPublicClient.getBlockNumber();
+    const stableHead = latestBlock > INDEXING_CONFIRMATIONS ? latestBlock - INDEXING_CONFIRMATIONS : 0n;
+    let scanBeforeBlock = requestedScanBlock ?? stableHead + 1n;
+    if (scanBeforeBlock > stableHead + 1n || (cursor && BigInt(cursor.blockNumber) > stableHead)) {
+      return NextResponse.json({ error: "Invalid history pagination cursor" }, { status: 400 });
+    }
     const workerAddress = workerAddressInput.toLowerCase();
-    const { data: challenge } = await supabase.from("worker_withdrawal_auth_challenges")
+    const { data: challenge, error: challengeError } = await supabase.from("worker_withdrawal_auth_challenges")
       .select("nonce, worker_address, expires_at, consumed_at")
       .eq("nonce", nonce)
       .eq("worker_address", workerAddress)
       .maybeSingle();
-    if (!challenge || challenge.consumed_at || challenge.expires_at !== expiresAt || Date.parse(challenge.expires_at) <= Date.now() ||
+    if (challengeError) {
+      console.error("Worker withdrawal challenge lookup failed", challengeError.code ?? "DatabaseError");
+      return NextResponse.json({ error: "Unable to verify wallet authorization" }, { status: 503 });
+    }
+    if (!isWorkerWithdrawalChallengeCurrent(challenge, workerAddress, expiresAt) ||
         !await verifyWorkerWithdrawalChallenge(workerAddressInput, nonce, expiresAt, signature as `0x${string}`)) {
       return NextResponse.json({ error: "Wallet authorization is invalid or expired" }, { status: 401 });
     }
-    const { data: consumed } = await supabase.from("worker_withdrawal_auth_challenges")
+    const { data: consumed, error: consumeError } = await supabase.from("worker_withdrawal_auth_challenges")
       .update({ consumed_at: new Date().toISOString() })
       .eq("nonce", nonce)
       .eq("worker_address", workerAddress)
@@ -131,17 +149,11 @@ export async function POST(request: Request) {
       .gt("expires_at", new Date().toISOString())
       .select("nonce")
       .maybeSingle();
+    if (consumeError) {
+      console.error("Worker withdrawal challenge consumption failed", consumeError.code ?? "DatabaseError");
+      return NextResponse.json({ error: "Unable to authorize withdrawal history access" }, { status: 503 });
+    }
     if (!consumed) return NextResponse.json({ error: "Wallet authorization has already been used" }, { status: 401 });
-
-    const cursor = parsePageCursor(body?.cursor);
-    const requestedScanBlock = parseScanCursor(body?.scan_before_block);
-    if (cursor === undefined || requestedScanBlock === undefined) return NextResponse.json({ error: "Invalid history pagination cursor" }, { status: 400 });
-
-    const chainId = await escrowPublicClient.getChainId();
-    if (chainId !== ARC_CHAIN_ID) return NextResponse.json({ error: "Arc Testnet RPC is misconfigured" }, { status: 503 });
-    const latestBlock = await escrowPublicClient.getBlockNumber();
-    let scanBeforeBlock = requestedScanBlock ?? latestBlock + 1n;
-    if (scanBeforeBlock > latestBlock + 1n) return NextResponse.json({ error: "Invalid history scan cursor" }, { status: 400 });
 
     let page = await getHistoryPage(workerAddress, cursor);
     let scanned = 0n;

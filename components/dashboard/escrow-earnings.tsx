@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { decodeEventLog, formatUnits, isAddress, parseUnits } from "viem";
 import { useAccount, useReadContract, usePublicClient, useSignMessage, useWriteContract } from "wagmi";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
@@ -42,6 +42,10 @@ export function EscrowEarnings() {
   const [historyCursor, setHistoryCursor] = useState<HistoryCursor | null>(null);
   const [scanBeforeBlock, setScanBeforeBlock] = useState<string | null>(null);
   const [historyHasMore, setHistoryHasMore] = useState(false);
+  const historyRequestId = useRef(0);
+  const historyRequestInFlight = useRef(false);
+  const connectedWallet = useRef(address?.toLowerCase() ?? null);
+  connectedWallet.current = address?.toLowerCase() ?? null;
   const { data: balance, isLoading, error: readError, refetch } = useReadContract({
     address: DO_IT_ESCROW_ADDRESS,
     abi: DO_IT_ESCROW_ABI,
@@ -51,6 +55,9 @@ export function EscrowEarnings() {
   });
 
   useEffect(() => {
+    historyRequestId.current += 1;
+    historyRequestInFlight.current = false;
+    setHistoryLoading(false);
     setHistory([]);
     setHistoryWallet(null);
     setHistoryLoaded(false);
@@ -61,11 +68,14 @@ export function EscrowEarnings() {
   }, [address]);
 
   async function loadHistoryPage(options: { cursor: HistoryCursor | null; scanBeforeBlock: string | null; reset: boolean }) {
+    if (historyRequestInFlight.current) return;
     if (!address || !isAddress(address, { strict: false })) {
       setHistoryError("Connect a valid worker wallet to authorize history access.");
       return;
     }
     const requestedWallet = address.toLowerCase();
+    const requestId = ++historyRequestId.current;
+    historyRequestInFlight.current = true;
     setHistoryLoading(true);
     setHistoryError("");
     try {
@@ -76,7 +86,9 @@ export function EscrowEarnings() {
       });
       const challenge = await challengeResponse.json();
       if (!challengeResponse.ok) throw new Error(challenge.error || "Could not authorize this wallet.");
+      if (historyRequestId.current !== requestId || connectedWallet.current !== requestedWallet) return;
       const signature = await signMessageAsync({ message: challenge.message });
+      if (historyRequestId.current !== requestId || connectedWallet.current !== requestedWallet) return;
       const response = await fetch("/api/worker/withdrawals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -91,6 +103,7 @@ export function EscrowEarnings() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not load confirmed withdrawal history.");
+      if (historyRequestId.current !== requestId || connectedWallet.current !== requestedWallet) return;
       const nextRows = data.withdrawals as WithdrawalHistoryItem[];
       setHistory((current) => {
         const base = options.reset || historyWallet?.toLowerCase() !== requestedWallet ? [] : current;
@@ -108,9 +121,14 @@ export function EscrowEarnings() {
       setScanBeforeBlock(data.scanBeforeBlock ?? options.scanBeforeBlock);
       setHistoryHasMore(Boolean(data.hasMore));
     } catch (cause) {
-      setHistoryError(cause instanceof Error ? cause.message : "Unable to load withdrawal history.");
+      if (historyRequestId.current === requestId && connectedWallet.current === requestedWallet) {
+        setHistoryError(cause instanceof Error ? cause.message : "Unable to load withdrawal history.");
+      }
     } finally {
-      setHistoryLoading(false);
+      if (historyRequestId.current === requestId) {
+        historyRequestInFlight.current = false;
+        setHistoryLoading(false);
+      }
     }
   }
 
@@ -196,7 +214,7 @@ export function EscrowEarnings() {
           ? <button type="button" onClick={() => loadHistoryPage({ cursor: null, scanBeforeBlock: null, reset: true })} disabled={!address || historyLoading} className="rounded-md border px-3 py-2 text-sm disabled:opacity-50">{historyLoading ? "Verifying wallet…" : "Verify wallet and load history"}</button>
           : historyHasMore && <button type="button" onClick={() => loadHistoryPage({ cursor: historyCursor, scanBeforeBlock, reset: false })} disabled={historyLoading} className="rounded-md border px-3 py-2 text-sm disabled:opacity-50">{historyLoading ? "Loading…" : "Load older history"}</button>}
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">A wallet signature authorizes a read of this wallet’s history only.</p>
+      <p className="mt-1 text-xs text-muted-foreground">A wallet signature authorizes a read of this wallet’s history only. Recent withdrawals may take 12 blocks to appear; this delay does not guarantee finality against later chain reorganizations.</p>
       {historyError && <p role="alert" className="mt-3 text-sm text-red-600">{historyError}</p>}
       {historyLoaded && historyWallet?.toLowerCase() === address?.toLowerCase() && (
         history.length ? <ul className="mt-3 divide-y rounded-md border">

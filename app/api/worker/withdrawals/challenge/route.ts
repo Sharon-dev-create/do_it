@@ -10,6 +10,9 @@ const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "A valid worker wallet is required" }, { status: 400 });
+    }
     const workerAddress = body?.worker_address;
     if (typeof workerAddress !== "string" || !isAddress(workerAddress, { strict: false })) {
       return NextResponse.json({ error: "A valid worker wallet is required" }, { status: 400 });
@@ -20,7 +23,11 @@ export async function POST(request: Request) {
     const nonce = randomBytes(32).toString("hex");
     const normalizedAddress = workerAddress.toLowerCase();
 
-    await supabase.from("worker_withdrawal_auth_challenges").delete().lt("expires_at", now.toISOString());
+    const { error: cleanupError } = await supabase.from("worker_withdrawal_auth_challenges").delete().lt("expires_at", now.toISOString());
+    if (cleanupError) {
+      console.error("Expired worker withdrawal challenge cleanup failed", cleanupError.code ?? "DatabaseError");
+      return NextResponse.json({ error: "Unable to create a wallet authorization challenge" }, { status: 503 });
+    }
     const { data: savedChallenge, error } = await supabase.from("worker_withdrawal_auth_challenges").insert({
       nonce,
       worker_address: normalizedAddress,

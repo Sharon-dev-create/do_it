@@ -3,7 +3,12 @@ import { createClient } from "@supabase/supabase-js";
 import { decodeEventLog, isHash } from "viem";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { ARC_CHAIN_ID, escrowPublicClient } from "@/lib/escrow-v2-server";
-import { isConfirmedWorkerWithdrawalReceipt } from "@/lib/worker-withdrawal-auth";
+import {
+  isConfirmedWorkerWithdrawalReceipt,
+  isMatchingWorkerWithdrawalSender,
+  isValidWorkerWithdrawalDeployment,
+  filterWorkerWithdrawalRows,
+} from "@/lib/worker-withdrawal-auth";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
@@ -13,6 +18,9 @@ export async function POST(request: Request) {
     const transactionHash = body?.transaction_hash;
     if (typeof transactionHash !== "string" || !isHash(transactionHash)) {
       return NextResponse.json({ error: "A valid withdrawal transaction hash is required" }, { status: 400 });
+    }
+    if (!isValidWorkerWithdrawalDeployment(DO_IT_ESCROW_ADDRESS, ARC_CHAIN_ID, 5042002)) {
+      return NextResponse.json({ error: "V2 escrow deployment is misconfigured" }, { status: 503 });
     }
     if (await escrowPublicClient.getChainId() !== ARC_CHAIN_ID) {
       return NextResponse.json({ error: "Arc Testnet RPC is misconfigured" }, { status: 503 });
@@ -38,7 +46,7 @@ export async function POST(request: Request) {
       if (log.address.toLowerCase() !== DO_IT_ESCROW_ADDRESS.toLowerCase()) continue;
       try {
         const event = decodeEventLog({ abi: DO_IT_ESCROW_ABI, data: log.data, topics: log.topics, eventName: "EarningsWithdrawn" });
-        if (event.args.worker.toLowerCase() === transaction.from.toLowerCase() && event.args.amount > 0n && log.logIndex !== undefined) {
+        if (isMatchingWorkerWithdrawalSender(event.args.worker, transaction.from) && event.args.amount > 0n && log.logIndex !== undefined) {
           matchingEvents.push({ worker: event.args.worker.toLowerCase(), amount: event.args.amount, logIndex: log.logIndex });
         }
       } catch { /* Ignore unrelated escrow logs. */ }
@@ -48,6 +56,9 @@ export async function POST(request: Request) {
     }
 
     const block = await escrowPublicClient.getBlock({ blockNumber: receipt.blockNumber });
+    if (block.hash !== receipt.blockHash) {
+      return NextResponse.json({ status: "submitted", recorded: false, message: "Withdrawal receipt is awaiting a stable block." }, { status: 202 });
+    }
     const blockTimestamp = new Date(Number(block.timestamp) * 1000).toISOString();
     const recordedAt = new Date().toISOString();
     const rows = matchingEvents.map((event) => ({
@@ -73,9 +84,12 @@ export async function POST(request: Request) {
       .eq("chain_id", ARC_CHAIN_ID)
       .eq("contract_address", DO_IT_ESCROW_ADDRESS.toLowerCase())
       .eq("tx_hash", txHash)
+      .eq("worker_address", transaction.from.toLowerCase())
+      .eq("status", "confirmed")
       .order("log_index", { ascending: true });
     if (readError) throw readError;
-    return NextResponse.json({ withdrawals: (history ?? []).map((row) => ({
+    const senderHistory = filterWorkerWithdrawalRows(history ?? [], transaction.from);
+    return NextResponse.json({ withdrawals: senderHistory.map((row) => ({
       ...row,
       amount_base_units: String(row.amount_base_units),
       chain_id: Number(row.chain_id),
