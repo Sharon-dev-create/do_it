@@ -5,6 +5,7 @@ import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscr
 import { ARC_CHAIN_ID, escrowPublicClient } from "@/lib/escrow-v2-server";
 import {
   isConfirmedWorkerWithdrawalReceipt,
+  isWorkerWithdrawalCursorInRange,
   isValidWorkerWithdrawalDeployment,
   isWorkerWithdrawalChallengeCurrent,
   parseWorkerWithdrawalPageCursor,
@@ -124,7 +125,7 @@ export async function POST(request: Request) {
     const latestBlock = await escrowPublicClient.getBlockNumber();
     const stableHead = latestBlock > INDEXING_CONFIRMATIONS ? latestBlock - INDEXING_CONFIRMATIONS : 0n;
     let scanBeforeBlock = requestedScanBlock ?? stableHead + 1n;
-    if (scanBeforeBlock > stableHead + 1n || (cursor && BigInt(cursor.blockNumber) > stableHead)) {
+    if (!isWorkerWithdrawalCursorInRange(scanBeforeBlock, cursor, DEPLOYMENT_BLOCK, stableHead)) {
       return NextResponse.json({ error: "Invalid history pagination cursor" }, { status: 400 });
     }
     const workerAddress = workerAddressInput.toLowerCase();

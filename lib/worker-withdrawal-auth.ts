@@ -17,6 +17,16 @@ export function parseWorkerWithdrawalScanCursor(value: unknown): bigint | null |
   return BigInt(value);
 }
 
+export function isWorkerWithdrawalCursorInRange(
+  scanBeforeBlock: bigint,
+  historyCursor: WorkerWithdrawalPageCursor | null,
+  deploymentBlock: bigint,
+  stableHead: bigint,
+) {
+  return scanBeforeBlock >= deploymentBlock && scanBeforeBlock <= stableHead + 1n &&
+    (!historyCursor || (BigInt(historyCursor.blockNumber) >= deploymentBlock && BigInt(historyCursor.blockNumber) <= stableHead));
+}
+
 export function isValidWorkerWithdrawalDeployment(address: string, chainId: number, expectedChainId: number) {
   return isAddress(address, { strict: false }) && chainId === expectedChainId;
 }
