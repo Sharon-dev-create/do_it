@@ -12,6 +12,7 @@ import { getWorkerSessionChallengeMessage } from "@/lib/worker-session-auth";
 import { getTaskSubmissionNotice, isTaskRewardConfirmed, postTaskAnswer } from "@/lib/task-submission-client";
 import { BrandLink } from "@/components/brand-link";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ARC_CHAIN_ID, ARC_EXPLORER_URL, ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 
 type Task = {
   id: string;
@@ -209,8 +210,8 @@ function TaskDetailContent() {
       setResult({ error: "Authorize this connected worker wallet before submitting." });
       return;
     }
-    if (task?.contract_version === "v2" && chainId !== 5042002) {
-      setResult({ error: "Switch your connected wallet to Arc Testnet before submitting a V2 task." });
+    if (task?.contract_version === "v2" && chainId !== ARC_CHAIN_ID) {
+      setResult({ error: `Switch your connected wallet to ${ARC_NETWORK_CONFIG.label} before submitting a V2 task.` });
       return;
     }
 
@@ -250,7 +251,7 @@ function TaskDetailContent() {
 
   async function finalizeClaim(submissionId: string) {
     if (!task?.blockchain_task_id || !publicClient || !address) {
-      setResult((current) => ({ ...current, error: "Arc Testnet wallet or task details are unavailable. Your accepted submission remains reserved." }));
+      setResult((current) => ({ ...current, error: `${ARC_NETWORK_CONFIG.label} wallet or task details are unavailable. Your accepted submission remains reserved.` }));
       return;
     }
     if (!isWorkerAuthorized) {
@@ -261,7 +262,7 @@ function TaskDetailContent() {
     try {
       let claimTxHash = pendingClaim?.submissionId === submissionId ? pendingClaim.claimTxHash : undefined;
       if (!claimTxHash) {
-        claimTxHash = await writeContractAsync({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, functionName: "claimTask", args: [BigInt(task.blockchain_task_id)], chainId: 5042002 });
+        claimTxHash = await writeContractAsync({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, functionName: "claimTask", args: [BigInt(task.blockchain_task_id)], chainId: ARC_CHAIN_ID });
         const receipt = await publicClient.waitForTransactionReceipt({ hash: claimTxHash });
         if (receipt.status !== "success") throw new Error(`Claim transaction reverted: ${claimTxHash}`);
         setPendingClaim((current) => current ? { ...current, claimTxHash } : current);
@@ -439,7 +440,7 @@ function TaskDetailContent() {
 
                   {result.txHash && (
                     <a
-                      href={`https://testnet.arcscan.app/tx/${result.txHash}`}
+                      href={`${ARC_EXPLORER_URL}/tx/${result.txHash}`}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -454,9 +455,9 @@ function TaskDetailContent() {
                 <>
                 <div className="task-result task-result-pending" role="status">
                   <span className="eyebrow">ANSWER ACCEPTED</span>
-                  <p>Confirm the Arc Testnet claim transaction to continue. Earnings are not credited yet.</p>
+                  <p>Confirm the {ARC_NETWORK_CONFIG.label} claim transaction to continue. Earnings are not credited yet.</p>
                 </div>
-                <button className="task-submit-button" type="button" disabled={submitting || chainId !== 5042002 || !isWorkerAuthorized} onClick={() => finalizeClaim(pendingClaim.submissionId)}>
+                <button className="task-submit-button" type="button" disabled={submitting || chainId !== ARC_CHAIN_ID || !isWorkerAuthorized} onClick={() => finalizeClaim(pendingClaim.submissionId)}>
                   {submitting ? "WAITING FOR ARC..." : "CONTINUE: CLAIM ON ARC"}
                 </button>
                 </>
@@ -467,7 +468,7 @@ function TaskDetailContent() {
                   <span className="eyebrow">REWARD CREDIT PENDING</span>
                   <p>The claim was accepted, but the reward is not confirmed in your earnings yet. Check its on-chain status before taking further action.</p>
                   {result.txHash && (
-                    <a href={`https://testnet.arcscan.app/tx/${result.txHash}`} target="_blank" rel="noreferrer">
+                    <a href={`${ARC_EXPLORER_URL}/tx/${result.txHash}`} target="_blank" rel="noreferrer">
                       View transaction <ArrowUpRight size={13} />
                     </a>
                   )}
@@ -507,11 +508,11 @@ function TaskDetailContent() {
               <button
                 className="task-submit-button"
                 type="submit"
-                disabled={submitting || Boolean(pendingClaim) || !isConnected || !isWorkerAuthorized || (task.contract_version === "v2" && chainId !== 5042002)}
+                disabled={submitting || Boolean(pendingClaim) || !isConnected || !isWorkerAuthorized || (task.contract_version === "v2" && chainId !== ARC_CHAIN_ID)}
               >
                 {submitting ? "VERIFYING / CLAIMING..." : "SUBMIT ANSWER"}
               </button>
-              {task.contract_version === "v2" && <p className="mt-4 text-xs text-[var(--doit-brand-warning)]">Testnet only: V2 earnings are credited to the escrow balance; they are not transferred until you withdraw. Only configured test workers may use this flow. The contract itself still permits unrestricted direct claims, so this is not a public-marketplace security boundary.</p>}
+              {task.contract_version === "v2" && <p className="mt-4 text-xs text-[var(--doit-brand-warning)]">V2 earnings are credited to the escrow balance; they are not transferred until you withdraw. Only configured workers may use this application flow. The contract itself still permits unrestricted direct claims, so this is not a public-marketplace security boundary.</p>}
             </form>
           ) : (
             <div className="task-closed-state">

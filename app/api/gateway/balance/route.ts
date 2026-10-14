@@ -18,16 +18,11 @@
 
 import { NextResponse } from "next/server";
 import { createPublicClient, http, formatUnits, erc20Abi } from "viem";
-
-
-const GATEWAY_API = "https://gateway-api-testnet.circle.com/v1/balances";
-const ARC_TESTNET_DOMAIN = 26;
-const ARC_TESTNET_RPC = "https://rpc.testnet.arc.network";
-const ARC_TESTNET_USDC =
-  "0x3600000000000000000000000000000000000000" as const;
+import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
+import { assertGatewayAvailable, SERVER_ARC_NETWORK_CONFIG } from "@/lib/arc-network-server";
 
 const publicClient = createPublicClient({
-  transport: http(ARC_TESTNET_RPC),
+  transport: http(SERVER_ARC_NETWORK_CONFIG.rpcUrl),
 });
 
 async function getWalletUsdcBalance(
@@ -35,13 +30,13 @@ async function getWalletUsdcBalance(
 ): Promise<string> {
   try {
     const balance = await publicClient.readContract({
-      address: ARC_TESTNET_USDC,
+      address: ARC_NETWORK_CONFIG.usdcAddress,
       abi: erc20Abi,
       functionName: "balanceOf",
       args: [address],
     });
 
-    return formatUnits(balance, 6);
+    return formatUnits(balance, ARC_NETWORK_CONFIG.usdcDecimals);
   } catch (error) {
     console.error("Failed to fetch wallet USDC balance:", error);
     return "0";
@@ -49,6 +44,14 @@ async function getWalletUsdcBalance(
 }
 
 export async function GET() {
+  try {
+    assertGatewayAvailable();
+  } catch {
+    return NextResponse.json(
+      { error: "Circle Gateway balance is unavailable on Arc Mainnet with the installed SDK." },
+      { status: 503 },
+    );
+  }
   const address = process.env.SELLER_ADDRESS;
 
   if (!address) {
@@ -62,7 +65,7 @@ export async function GET() {
 
   try {
     const [gatewayResponse, walletBalance] = await Promise.all([
-      fetch(GATEWAY_API, {
+      fetch("https://gateway-api-testnet.circle.com/v1/balances", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -72,7 +75,7 @@ export async function GET() {
           token: "USDC",
           sources: [
             {
-              domain: ARC_TESTNET_DOMAIN,
+              domain: 26,
               depositor: sellerAddress,
             },
           ],
@@ -107,7 +110,7 @@ export async function GET() {
 
     const bal = data.balances?.find(
       (b: { domain: number }) =>
-        b.domain === ARC_TESTNET_DOMAIN,
+        b.domain === 26,
     );
 
     const balance = bal?.balance ?? "0";

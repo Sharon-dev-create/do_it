@@ -56,11 +56,12 @@ import { usePaymentEvents } from "@/hooks/use-transactions";
 import { useWithdrawals } from "@/hooks/use-withdrawals";
 import { EscrowEarnings } from "@/components/dashboard/escrow-earnings";
 import { CreatorTaskManager } from "@/components/dashboard/creator-task-manager";
+import { ARC_EXPLORER_URL } from "@/lib/arc-network";
 
 type SortDirection = "default" | "asc" | "desc";
 type SortField = "amount" | "date";
 
-const EXPLORER_BASE = "https://testnet.arcscan.app";
+const EXPLORER_BASE = ARC_EXPLORER_URL;
 
 function nextSortDirection(current: SortDirection): SortDirection {
   if (current === "default") return "asc";

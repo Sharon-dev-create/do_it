@@ -4,6 +4,8 @@ import {
   CHAIN_CONFIGS,
   GatewayClient,
 } from "@circle-fin/x402-batching/client";
+import { assertGatewayNetwork } from "@/lib/arc-network";
+import { assertGatewayAvailable, SERVER_ARC_NETWORK_CONFIG } from "@/lib/arc-network-server";
 import {
   isAddress,
   maxUint256,
@@ -16,6 +18,8 @@ export async function payWorker(
   workerAddress: `0x${string}`,
   onSubmitted?: (txHash: `0x${string}`) => Promise<void>,
 ) {
+  assertGatewayNetwork(SERVER_ARC_NETWORK_CONFIG.name);
+  assertGatewayAvailable();
   console.info("PAYOUT: started");
 
   if (!isAddress(workerAddress)) {
@@ -37,6 +41,17 @@ export async function payWorker(
   });
 
   const config = CHAIN_CONFIGS.arcTestnet;
+  const rpcUrl = process.env.ARC_RPC_URL || SERVER_ARC_NETWORK_CONFIG.rpcUrl;
+  const rpcChainResponse = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", method: "eth_chainId", params: [], id: 1 }),
+  });
+  const rpcChain = await rpcChainResponse.json();
+  if (!rpcChainResponse.ok || rpcChain.error ||
+      Number.parseInt(rpcChain.result, 16) !== SERVER_ARC_NETWORK_CONFIG.chainId) {
+    throw new Error("Gateway payout RPC does not match the selected Arc Testnet configuration.");
+  }
 
   const withdrawAmount = parseUnits(amount, 6);
   const maxFee = parseUnits("2.01", 6);
@@ -240,7 +255,7 @@ export async function payWorker(
   // Get the next transaction nonce directly from Arc RPC.
   console.info("PAYOUT: requesting Arc transaction nonce");
   const nonceResponse = await fetch(
-    process.env.ARC_RPC_URL!,
+    rpcUrl,
     {
       method: "POST",
       headers: {

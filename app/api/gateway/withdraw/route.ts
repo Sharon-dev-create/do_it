@@ -23,6 +23,7 @@ import {
   GATEWAY_DOMAINS,
 } from "@circle-fin/x402-batching/client";
 import { createClient } from "@supabase/supabase-js";
+import { assertGatewayAvailable } from "@/lib/arc-network-server";
 
 const SUPPORTED_CHAIN_LABELS: Record<string, string> = {
   arcTestnet: "Arc Testnet",
@@ -40,6 +41,14 @@ const supabase = createClient(
 );
 
 export async function POST(req: NextRequest) {
+  try {
+    assertGatewayAvailable();
+  } catch {
+    return NextResponse.json(
+      { error: "Circle Gateway withdrawals are unavailable on Arc Mainnet with the installed SDK." },
+      { status: 503 },
+    );
+  }
   const privateKey = process.env.SELLER_PRIVATE_KEY;
   if (!privateKey) {
     return NextResponse.json(
@@ -62,7 +71,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!(destinationChain in GATEWAY_DOMAINS)) {
+  const testnetDestinations = [
+    "arcTestnet",
+    "baseSepolia",
+    "sepolia",
+    "arbitrumSepolia",
+    "optimismSepolia",
+    "avalancheFuji",
+    "polygonAmoy",
+  ] as const;
+  if (!testnetDestinations.includes(destinationChain as (typeof testnetDestinations)[number]) ||
+      !(destinationChain in GATEWAY_DOMAINS)) {
     return NextResponse.json(
       { error: `Unsupported chain: ${destinationChain}` },
       { status: 400 },

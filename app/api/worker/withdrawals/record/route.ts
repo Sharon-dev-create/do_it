@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { decodeEventLog, isHash } from "viem";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
-import { ARC_CHAIN_ID, escrowPublicClient } from "@/lib/escrow-v2-server";
+import { ARC_CHAIN_ID, assertArcEscrowDeployment, escrowPublicClient } from "@/lib/escrow-v2-server";
+import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 import {
   isConfirmedWorkerWithdrawalReceipt,
   isMatchingWorkerWithdrawalSender,
@@ -19,11 +20,12 @@ export async function POST(request: Request) {
     if (typeof transactionHash !== "string" || !isHash(transactionHash)) {
       return NextResponse.json({ error: "A valid withdrawal transaction hash is required" }, { status: 400 });
     }
-    if (!isValidWorkerWithdrawalDeployment(DO_IT_ESCROW_ADDRESS, ARC_CHAIN_ID, 5042002)) {
+    if (!isValidWorkerWithdrawalDeployment(DO_IT_ESCROW_ADDRESS, ARC_CHAIN_ID, ARC_CHAIN_ID)) {
       return NextResponse.json({ error: "V2 escrow deployment is misconfigured" }, { status: 503 });
     }
+    await assertArcEscrowDeployment();
     if (await escrowPublicClient.getChainId() !== ARC_CHAIN_ID) {
-      return NextResponse.json({ error: "Arc Testnet RPC is misconfigured" }, { status: 503 });
+      return NextResponse.json({ error: `${ARC_NETWORK_CONFIG.label} RPC is misconfigured` }, { status: 503 });
     }
 
     const txHash = transactionHash.toLowerCase();

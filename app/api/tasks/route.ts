@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { decodeEventLog, isAddress, isHash, parseUnits } from "viem";
-import { ARC_TESTNET_USDC } from "@/lib/contracts/usdc";
+import { ARC_USDC_ADDRESS } from "@/lib/contracts/usdc";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
-import { escrowPublicClient } from "@/lib/escrow-v2-server";
+import { ARC_CHAIN_ID, assertArcEscrowDeployment, escrowPublicClient } from "@/lib/escrow-v2-server";
+import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const PUBLIC_TASK_FIELDS = "id, title, description, reward_usdc, created_by, status, created_at, updated_at, blockchain_task_id, create_tx_hash, fund_tx_hash, contract_version";
@@ -32,7 +33,8 @@ export async function POST(request: Request) {
     const { data: existing } = await supabase.from("tasks").select(PUBLIC_TASK_FIELDS).eq("create_tx_hash", create_tx_hash).maybeSingle();
     if (existing) return NextResponse.json({ task: existing, recovered: true }, { status: 200 });
 
-    if ((await escrowPublicClient.getChainId()) !== 5042002) throw new Error("Configured RPC is not Arc Testnet");
+    await assertArcEscrowDeployment();
+    if ((await escrowPublicClient.getChainId()) !== ARC_CHAIN_ID) throw new Error(`Configured RPC is not ${ARC_NETWORK_CONFIG.label}`);
     const [createReceipt, fundReceipt] = await Promise.all([
       escrowPublicClient.getTransactionReceipt({ hash: create_tx_hash }),
       escrowPublicClient.getTransactionReceipt({ hash: fund_tx_hash }),
@@ -57,7 +59,7 @@ export async function POST(request: Request) {
       } catch { return false; }
     });
     const escrowUsdc = await escrowPublicClient.readContract({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, functionName: "usdc" });
-    if (!created || !funded || escrowUsdc.toLowerCase() !== ARC_TESTNET_USDC.toLowerCase()) {
+    if (!created || !funded || escrowUsdc.toLowerCase() !== ARC_USDC_ADDRESS.toLowerCase()) {
       return NextResponse.json({ error: "On-chain task metadata did not match the submitted transactions" }, { status: 400 });
     }
     const state = await escrowPublicClient.readContract({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, functionName: "tasks", args: [chainTaskId] });

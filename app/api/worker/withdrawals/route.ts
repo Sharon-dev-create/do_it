@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { decodeEventLog, isAddress, isHex } from "viem";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
-import { ARC_CHAIN_ID, escrowPublicClient } from "@/lib/escrow-v2-server";
+import { ARC_CHAIN_ID, assertArcEscrowDeployment, escrowPublicClient } from "@/lib/escrow-v2-server";
+import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 import {
   isConfirmedWorkerWithdrawalReceipt,
   isWorkerWithdrawalCursorInRange,
@@ -14,7 +15,9 @@ import {
 } from "@/lib/worker-withdrawal-auth";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-const DEPLOYMENT_BLOCK = 66_340_107n;
+const DEPLOYMENT_BLOCK = ARC_NETWORK_CONFIG.name === "mainnet"
+  ? BigInt(process.env.ARC_MAINNET_DEPLOYMENT_BLOCK!)
+  : 66_340_107n;
 const BLOCKS_PER_CHUNK = 2_000n;
 const MAX_BLOCKS_PER_REQUEST = 20_000n;
 const INDEXING_CONFIRMATIONS = 12n;
@@ -117,11 +120,12 @@ export async function POST(request: Request) {
     const requestedScanBlock = parseWorkerWithdrawalScanCursor(body.scan_before_block);
     if (cursor === undefined || requestedScanBlock === undefined) return NextResponse.json({ error: "Invalid history pagination cursor" }, { status: 400 });
 
-    if (!isValidWorkerWithdrawalDeployment(DO_IT_ESCROW_ADDRESS, ARC_CHAIN_ID, 5042002)) {
+    if (!isValidWorkerWithdrawalDeployment(DO_IT_ESCROW_ADDRESS, ARC_CHAIN_ID, ARC_CHAIN_ID)) {
       return NextResponse.json({ error: "V2 escrow deployment is misconfigured" }, { status: 503 });
     }
+    await assertArcEscrowDeployment();
     const chainId = await escrowPublicClient.getChainId();
-    if (chainId !== ARC_CHAIN_ID) return NextResponse.json({ error: "Arc Testnet RPC is misconfigured" }, { status: 503 });
+    if (chainId !== ARC_CHAIN_ID) return NextResponse.json({ error: `${ARC_NETWORK_CONFIG.label} RPC is misconfigured` }, { status: 503 });
     const latestBlock = await escrowPublicClient.getBlockNumber();
     const stableHead = latestBlock > INDEXING_CONFIRMATIONS ? latestBlock - INDEXING_CONFIRMATIONS : 0n;
     let scanBeforeBlock = requestedScanBlock ?? stableHead + 1n;

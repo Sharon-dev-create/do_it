@@ -8,15 +8,17 @@ import {
 } from "viem";
 import { decodeEventLog } from "viem";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
+import { ARC_CHAIN_ID, assertArcEscrowDeployment, escrowPublicClient } from "@/lib/escrow-v2-server";
+import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
-const arcTestnet = {
-  id: 5042002,
-  name: "Arc Testnet",
+const arcChain = {
+  id: ARC_NETWORK_CONFIG.chainId,
+  name: ARC_NETWORK_CONFIG.label,
   nativeCurrency: {
     name: "USDC", 
     symbol: "USDC",
@@ -24,14 +26,14 @@ const arcTestnet = {
   },
   rpcUrls: {
     default: {
-      http: ["https://rpc.testnet.arc.network"],
+      http: [ARC_NETWORK_CONFIG.rpcUrl],
     },
   },
 } as const;
 
 const publicClient = createPublicClient({
-  chain: arcTestnet,
-  transport: http("https://rpc.testnet.arc.network"),
+  chain: arcChain,
+  transport: http(ARC_NETWORK_CONFIG.rpcUrl),
 });
 
 export async function POST(
@@ -56,6 +58,11 @@ export async function POST(
     }
 
     if (payment.payment_mechanism === "v2_reward_credit") {
+      try {
+        await assertArcEscrowDeployment();
+      } catch {
+        return NextResponse.json({ error: `${ARC_NETWORK_CONFIG.label} escrow is unavailable or misconfigured.` }, { status: 503 });
+      }
       if (payment.status === "processing" && !payment.tx_hash) {
         const { data: task } = await supabase.from("tasks").select("id, contract_version, blockchain_task_id, reward_usdc").eq("id", payment.task_id).maybeSingle();
         if (!task || task.contract_version !== "v2" || task.blockchain_task_id === null) return NextResponse.json({ error: "V2 payment is not linked to a valid V2 task" }, { status: 409 });
@@ -111,6 +118,9 @@ export async function POST(
     const { data: linkedTask } = await supabase.from("tasks").select("contract_version").eq("id", payment.task_id).maybeSingle();
     if (linkedTask?.contract_version === "v2") {
       return NextResponse.json({ error: "V2 tasks require a V2 reward-credit payment record; generic Gateway reconciliation is disabled" }, { status: 409 });
+    }
+    if (ARC_NETWORK_CONFIG.name === "mainnet") {
+      return NextResponse.json({ error: "Legacy Gateway payments cannot be reconciled on Arc Mainnet with the installed Circle SDK." }, { status: 503 });
     }
 
     // 2. Only submitted payments need reconciliation

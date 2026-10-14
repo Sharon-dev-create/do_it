@@ -4,7 +4,9 @@ import { createClient } from "@supabase/supabase-js";
 import { decodeEventLog, isAddress, isHash } from "viem";
 import { payWorker } from "@/lib/payout";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
-import { ARC_CHAIN_ID, escrowPublicClient, getVerifierWalletClient, isConfiguredV2TestWorker, verifyV2TaskRecord } from "@/lib/escrow-v2-server";
+import { ARC_CHAIN_ID, assertArcEscrowDeployment, escrowPublicClient, getVerifierWalletClient, isConfiguredV2TestWorker, verifyV2TaskRecord } from "@/lib/escrow-v2-server";
+import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
+import { assertGatewayAvailable } from "@/lib/arc-network-server";
 import { getTaskCreatorSubmissionError } from "@/lib/submission-auth";
 import { getMatchingWorkerSessionAddress, WORKER_SESSION_COOKIE } from "@/lib/worker-session-auth";
 
@@ -21,12 +23,14 @@ type V2TaskRecord = {
 };
 
 async function submitV2(task: V2TaskRecord, taskId: string, worker: string, answer: string, claimHash?: string, submissionId?: string) {
-  if (!isConfiguredV2TestWorker(worker)) return NextResponse.json({ error: "This V2 testnet deployment accepts submissions only from configured test workers." }, { status: 403 });
-  if ((await escrowPublicClient.getChainId()) !== ARC_CHAIN_ID) return NextResponse.json({ error: "Arc Testnet RPC is unavailable or misconfigured" }, { status: 503 });
+  if (!isConfiguredV2TestWorker(worker)) return NextResponse.json({ error: "This V2 deployment accepts submissions only from configured workers." }, { status: 403 });
+  try { await assertArcEscrowDeployment(); }
+  catch { return NextResponse.json({ error: `${ARC_NETWORK_CONFIG.label} escrow deployment is unavailable or misconfigured.` }, { status: 503 }); }
+  if ((await escrowPublicClient.getChainId()) !== ARC_CHAIN_ID) return NextResponse.json({ error: `${ARC_NETWORK_CONFIG.label} RPC is unavailable or misconfigured` }, { status: 503 });
 
   let onchain;
   try { onchain = await verifyV2TaskRecord(task); }
-  catch { return NextResponse.json({ error: "Unable to verify the V2 task against Arc Testnet" }, { status: 503 }); }
+  catch { return NextResponse.json({ error: `Unable to verify the V2 task against ${ARC_NETWORK_CONFIG.label}` }, { status: 503 }); }
 
   if (claimHash !== undefined) {
     if (!submissionId || !UUID.test(submissionId) || !isHash(claimHash)) return NextResponse.json({ error: "A valid submission ID and claim transaction hash are required" }, { status: 400 });
@@ -118,10 +122,12 @@ async function submitV2(task: V2TaskRecord, taskId: string, worker: string, answ
     // Keep the task reserved: a unique payment conflict may mean an earlier credit needs reconciliation.
     return NextResponse.json({ error: "Submission reserved but reward record could not be created. Contact support; do not submit again.", submissionId: submission.id }, { status: 500 });
   }
-  return NextResponse.json({ correct: true, submissionId: submission.id, paymentId: payment.id, requiresClaim: true, message: "Answer accepted. Confirm the Arc Testnet claim transaction to continue." });
+  return NextResponse.json({ correct: true, submissionId: submission.id, paymentId: payment.id, requiresClaim: true, message: `Answer accepted. Confirm the ${ARC_NETWORK_CONFIG.label} claim transaction to continue.` });
 }
 
 async function submitV1(task: Record<string, any>, worker: string, answer: string) {
+  try { assertGatewayAvailable(); }
+  catch { return NextResponse.json({ error: "V1 Gateway payouts are unavailable on Arc Mainnet with the installed Circle SDK." }, { status: 503 }); }
   if (task.status !== "open") return NextResponse.json({ error: "Task is no longer open" }, { status: 409 });
   const isCorrect = answer.trim().toLowerCase() === String(task.correct_answer ?? "").trim().toLowerCase();
   if (!isCorrect) {
@@ -191,6 +197,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (task.contract_version === "v2") return submitV2(task, id, worker, answer, body.claim_tx_hash, body.submission_id);
     return submitV1(task, worker, answer);
   } catch {
-    return NextResponse.json({ error: "Unable to process submission. Check the task and Arc Testnet status." }, { status: 500 });
+    return NextResponse.json({ error: `Unable to process submission. Check the task and ${ARC_NETWORK_CONFIG.label} status.` }, { status: 500 });
   }
 }

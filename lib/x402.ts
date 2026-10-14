@@ -19,8 +19,8 @@
 import { BatchFacilitatorClient } from "@circle-fin/x402-batching/server";
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { assertGatewayAvailable, SERVER_ARC_NETWORK_CONFIG } from "@/lib/arc-network-server";
 
-// Arc Testnet contract addresses (from @circle-fin/x402-batching SDK)
 const ARC_TESTNET_NETWORK = "eip155:5042002";
 const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000";
 const ARC_TESTNET_GATEWAY_WALLET = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9";
@@ -75,6 +75,20 @@ export function withGateway(
   const requirements = buildPaymentRequirements(price);
 
   return async (req: NextRequest) => {
+    try {
+      assertGatewayAvailable();
+    } catch {
+      return NextResponse.json(
+        { error: "Circle Gateway Nanopayments are unavailable on Arc Mainnet with the installed SDK." },
+        { status: 503 },
+      );
+    }
+    if (SERVER_ARC_NETWORK_CONFIG.chainId !== 5042002) {
+      return NextResponse.json(
+        { error: "Configured x402 payment requirements do not match Arc Testnet." },
+        { status: 503 },
+      );
+    }
     const paymentSignature = req.headers.get("payment-signature");
 
     // No payment — return 402 with Gateway batching payment requirements
