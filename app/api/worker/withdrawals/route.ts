@@ -15,9 +15,7 @@ import {
 } from "@/lib/worker-withdrawal-auth";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-const DEPLOYMENT_BLOCK = ARC_NETWORK_CONFIG.name === "mainnet"
-  ? BigInt(process.env.ARC_MAINNET_DEPLOYMENT_BLOCK!)
-  : 66_340_107n;
+const TESTNET_DEPLOYMENT_BLOCK = 66_340_107n;
 const BLOCKS_PER_CHUNK = 2_000n;
 const MAX_BLOCKS_PER_REQUEST = 20_000n;
 const INDEXING_CONFIRMATIONS = 12n;
@@ -124,12 +122,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "V2 escrow deployment is misconfigured" }, { status: 503 });
     }
     await assertArcEscrowDeployment();
+    const deploymentBlock = ARC_NETWORK_CONFIG.name === "mainnet"
+      ? BigInt(process.env.ARC_MAINNET_DEPLOYMENT_BLOCK!)
+      : TESTNET_DEPLOYMENT_BLOCK;
     const chainId = await escrowPublicClient.getChainId();
     if (chainId !== ARC_CHAIN_ID) return NextResponse.json({ error: `${ARC_NETWORK_CONFIG.label} RPC is misconfigured` }, { status: 503 });
     const latestBlock = await escrowPublicClient.getBlockNumber();
     const stableHead = latestBlock > INDEXING_CONFIRMATIONS ? latestBlock - INDEXING_CONFIRMATIONS : 0n;
     let scanBeforeBlock = requestedScanBlock ?? stableHead + 1n;
-    if (!isWorkerWithdrawalCursorInRange(scanBeforeBlock, cursor, DEPLOYMENT_BLOCK, stableHead)) {
+    if (!isWorkerWithdrawalCursorInRange(scanBeforeBlock, cursor, deploymentBlock, stableHead)) {
       return NextResponse.json({ error: "Invalid history pagination cursor" }, { status: 400 });
     }
     const workerAddress = workerAddressInput.toLowerCase();
@@ -162,10 +163,10 @@ export async function POST(request: Request) {
 
     let page = await getHistoryPage(workerAddress, cursor);
     let scanned = 0n;
-    while (page.length <= PAGE_SIZE && scanBeforeBlock > DEPLOYMENT_BLOCK && scanned < MAX_BLOCKS_PER_REQUEST) {
-      const fromBlock = scanBeforeBlock - DEPLOYMENT_BLOCK > BLOCKS_PER_CHUNK
+    while (page.length <= PAGE_SIZE && scanBeforeBlock > deploymentBlock && scanned < MAX_BLOCKS_PER_REQUEST) {
+      const fromBlock = scanBeforeBlock - deploymentBlock > BLOCKS_PER_CHUNK
         ? scanBeforeBlock - BLOCKS_PER_CHUNK
-        : DEPLOYMENT_BLOCK;
+        : deploymentBlock;
       const toBlock = scanBeforeBlock - 1n;
       await indexConfirmedEvents(workerAddress, fromBlock, toBlock);
       scanned += scanBeforeBlock - fromBlock;
@@ -185,8 +186,8 @@ export async function POST(request: Request) {
       withdrawals,
       nextCursor: last ? { blockNumber: last.block_number, logIndex: last.log_index } : cursor,
       scanBeforeBlock: scanBeforeBlock.toString(),
-      scanComplete: scanBeforeBlock <= DEPLOYMENT_BLOCK,
-      hasMore: hasMoreRows || scanBeforeBlock > DEPLOYMENT_BLOCK,
+      scanComplete: scanBeforeBlock <= deploymentBlock,
+      hasMore: hasMoreRows || scanBeforeBlock > deploymentBlock,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("Worker withdrawal history failed", error instanceof Error ? error.name : "UnknownError");
