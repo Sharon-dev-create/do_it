@@ -60,7 +60,10 @@ export function TopBarGatewayControls() {
   }, []);
 
   useEffect(() => {
-    if (ARC_NETWORK_CONFIG.name === "mainnet") return;
+    if (ARC_NETWORK_CONFIG.name === "mainnet") {
+      void fetchBalances();
+      return;
+    }
     const supabase = createClient();
     const channel = supabase
       .channel("balance-refresh")
@@ -98,9 +101,34 @@ export function TopBarGatewayControls() {
     return (
       <div className="flex flex-1 items-center justify-between gap-3 min-w-0">
         <BrandLink compact />
-        <span className="text-xs text-muted-foreground">
-          Circle Gateway is unavailable on Arc Mainnet in the installed SDK.
-        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <Badge variant="outline" className="gap-1.5 text-xs pr-1.5">
+            <span className="text-muted-foreground font-sans">Gateway:</span>
+            <span className="font-mono leading-none translate-y-px inline-flex items-center gap-1">
+              {loading && !balances ? <Loader2 size={12} className="animate-spin" /> : null}
+              {balances ? `$${balances.gateway.available} USDC` : loading ? "Loading..." : "—"}
+            </span>
+            <GatewayBalanceDialog
+              balances={balances}
+              loading={loading}
+              error={balanceError}
+              onRefresh={fetchBalances}
+              trigger={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5 -mr-0.5"
+                  aria-label="Open gateway balance details"
+                >
+                  <Info size={12} className="text-muted-foreground" />
+                </Button>
+              }
+            />
+          </Badge>
+          <span className="hidden text-xs text-muted-foreground md:inline">
+            In-app Gateway withdrawals are not enabled on Mainnet.
+          </span>
+        </div>
       </div>
     );
   }

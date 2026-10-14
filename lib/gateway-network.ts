@@ -7,7 +7,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import {
   ARC_USDC_ADDRESS,
   type ArcNetworkName,
-} from "@/lib/arc-network";
+} from "./arc-network.ts";
 
 const GATEWAY_API_URLS: Record<ArcNetworkName, string> = {
   testnet: "https://gateway-api-testnet.circle.com/v1",

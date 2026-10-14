@@ -9,7 +9,8 @@ import {
 import { decodeEventLog } from "viem";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { ARC_CHAIN_ID, assertArcEscrowDeployment, escrowPublicClient } from "@/lib/escrow-v2-server";
-import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
+import { ARC_NETWORK_CONFIG, assertArcChainId } from "@/lib/arc-network";
+import { getGatewayChainConfig, hasArcMainnetMintLog } from "@/lib/gateway-network";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -119,10 +120,6 @@ export async function POST(
     if (linkedTask?.contract_version === "v2") {
       return NextResponse.json({ error: "V2 tasks require a V2 reward-credit payment record; generic Gateway reconciliation is disabled" }, { status: 409 });
     }
-    if (ARC_NETWORK_CONFIG.name === "mainnet") {
-      return NextResponse.json({ error: "Legacy Gateway payments cannot be reconciled on Arc Mainnet with the installed Circle SDK." }, { status: 503 });
-    }
-
     // 2. Only submitted payments need reconciliation
     if (payment.status !== "submitted") {
       return NextResponse.json(
@@ -147,8 +144,18 @@ export async function POST(
 
     const txHash = payment.tx_hash as Hex;
 
-    // 4. Ask Arc for the transaction receipt
+    // 4. Ask the selected Arc network for the transaction receipt
     let receipt;
+
+    try {
+      assertArcChainId(ARC_NETWORK_CONFIG.name, await publicClient.getChainId());
+    } catch (error) {
+      console.error("Payment reconciliation RPC chain check failed:", error);
+      return NextResponse.json(
+        { error: "Configured RPC does not match the selected Arc network.", payment, txHash },
+        { status: 503 },
+      );
+    }
 
     try {
       receipt = await publicClient.getTransactionReceipt({
@@ -211,6 +218,33 @@ export async function POST(
     }
 
     // 6. Transaction succeeded
+    if (ARC_NETWORK_CONFIG.name === "mainnet") {
+      const gatewayConfig = getGatewayChainConfig(ARC_NETWORK_CONFIG.name);
+      let expectedAmount: bigint;
+      try {
+        expectedAmount = parseUnits(String(payment.amount_usdc), 6);
+      } catch {
+        return NextResponse.json(
+          { error: "Stored Gateway payment amount is invalid; payment remains submitted for review.", payment, txHash },
+          { status: 409 },
+        );
+      }
+      if (
+        receipt.to?.toLowerCase() !== gatewayConfig.gatewayMinter.toLowerCase() ||
+        !hasArcMainnetMintLog(receipt.logs, payment.worker_address, expectedAmount)
+      ) {
+        return NextResponse.json(
+          {
+            error: "Arc Mainnet receipt does not confirm the expected Gateway USDC mint to this worker; payment remains submitted.",
+            payment,
+            txHash,
+            requiresReconciliation: true,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     const { data: confirmedPayment, error: confirmError } =
       await supabase
         .from("task_payments")

@@ -23,7 +23,11 @@ import {
   GATEWAY_DOMAINS,
 } from "@circle-fin/x402-batching/client";
 import { createClient } from "@supabase/supabase-js";
-import { assertGatewayAvailable } from "@/lib/arc-network-server";
+import {
+  assertGatewayAvailable,
+  SERVER_ARC_NETWORK_CONFIG,
+} from "@/lib/arc-network-server";
+import { getGatewayChainName, getGatewaySellerCredentials } from "@/lib/gateway-network";
 
 const SUPPORTED_CHAIN_LABELS: Record<string, string> = {
   arcTestnet: "Arc Testnet",
@@ -45,14 +49,24 @@ export async function POST(req: NextRequest) {
     assertGatewayAvailable();
   } catch {
     return NextResponse.json(
-      { error: "Circle Gateway withdrawals are unavailable on Arc Mainnet with the installed SDK." },
+      { error: "Circle Gateway is unavailable for the selected Arc network." },
       { status: 503 },
     );
   }
-  const privateKey = process.env.SELLER_PRIVATE_KEY;
-  if (!privateKey) {
+  if (SERVER_ARC_NETWORK_CONFIG.name === "mainnet") {
     return NextResponse.json(
-      { error: "SELLER_PRIVATE_KEY not configured" },
+      {
+        error: "In-app Gateway withdrawals remain disabled on Arc Mainnet until the flow can persist the transaction hash before confirmation and verify the confirmed recipient and amount.",
+      },
+      { status: 503 },
+    );
+  }
+  let privateKey: `0x${string}`;
+  try {
+    ({ privateKey } = getGatewaySellerCredentials("testnet"));
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Testnet seller configuration is invalid." },
       { status: 500 },
     );
   }
@@ -89,8 +103,9 @@ export async function POST(req: NextRequest) {
   }
 
   const gateway = new GatewayClient({
-    chain: "arcTestnet",
-    privateKey: privateKey as `0x${string}`,
+    chain: getGatewayChainName("testnet"),
+    privateKey,
+    rpcUrl: SERVER_ARC_NETWORK_CONFIG.rpcUrl,
   });
 
   const isCrossChain = destinationChain !== "arcTestnet";

@@ -87,7 +87,7 @@ flowchart LR
 - **Wallet integration:** RainbowKit and wagmi connect browser wallets and submit the explicit Arc transactions required for task creation, V2 claiming, and withdrawal. A signed worker session is used for API identity; the session cookie is server-validated.
 - **Supabase:** stores task metadata, submissions, payment status, batch idempotency records, wallet challenges, and withdrawal history. Server API routes use the service-role key for privileged operations. Keep that key server-side.
 - **Circle Gateway:** used by the V1 Gateway payout flow and the separate x402-protected API examples. The app's V1 payout code requests a Circle transfer attestation, then submits a Gateway mint transaction on Arc.
-- **Arc:** the selected environment configures either Arc Testnet or Arc Mainnet for V2 escrow reads and transactions. The Gateway integration remains testnet-only.
+- **Arc:** the selected environment configures either Arc Testnet or Arc Mainnet for V2 escrow reads and transactions. Circle Gateway uses the matching SDK chain and API endpoint for direct V1 payouts and x402 payments.
 - **DoItEscrowV2:** holds creator-funded task rewards. The verifier credits accepted rewards to workers' on-contract balances; workers withdraw those balances in a separate transaction.
 
 ## Technology Stack
@@ -110,15 +110,15 @@ Network selection is explicit and must match in the server and browser environme
 
 The existing escrow address `0x024539183A57428C63B2F2628b881105213332E4` and verifier `0x41aa5227695B8c6c5FfAD3bF3A9aAF0626921d0E` are testnet-only. No Arc Mainnet escrow deployment is included. Mainnet V2 routes require a separately reviewed deployment, matching runtime bytecode hash, and verifier configuration before the application will use that address.
 
-Circle's current Gateway documentation lists Arc Mainnet as `arc` (domain `26`) and supports nanopayments. The installed `@circle-fin/x402-batching` SDK 2.0.4 exposes `arcTestnet` only and does not define the documented Mainnet `arc` chain. Gateway balance/withdrawal, V1 Gateway payouts, and x402 Gateway settlement therefore remain disabled on Mainnet. The bulk-task endpoint rejects Mainnet requests rather than creating tasks whose payout path cannot execute.
+Circle's current Gateway documentation lists Arc Mainnet as `arc` (domain `26`) and supports nanopayments. `@circle-fin/x402-batching` is pinned to 3.5.0, whose Arc Mainnet chain, USDC, Gateway wallet/minter, and API configuration are checked against Circle's current documentation at runtime. Gateway API and x402 configuration fail closed if the SDK's chain/token/contracts or facilitator-supported payment kind do not match the selected network.
 
-**Supported upgrade path (not applied):** the published `@circle-fin/x402-batching` 3.5.0 package exposes `CHAIN_CONFIGS.arc`, `GATEWAY_DOMAINS.arc`, a Mainnet Arc chain (5042), the Arc USDC address, and Mainnet Gateway wallet/minter addresses; it also selects `https://gateway-api.circle.com/v1` for Mainnet. Upgrading requires reviewing its major-version API changes and migrating each existing manually constructed Gateway/x402 flow, then validating signed requirements, attestation and on-chain settlement against Circle's current docs. Do not merely change `arcTestnet` to `arc` or reuse Testnet API endpoints.
+Arc Mainnet V1 Gateway payouts, Gateway balance lookup, and x402 settlement are separate from Do-It's V2 escrow. They require an isolated Mainnet seller address/key (`SELLER_MAINNET_ADDRESS`, `SELLER_MAINNET_PRIVATE_KEY`) and explicit matching Mainnet network/RPC settings. Mainnet Gateway in-app withdrawals remain disabled: the SDK withdrawal method does not expose Do-It's early transaction-hash persistence hook or validate receipt success/recipient/amount, and the app's existing withdrawal route does not yet provide equivalent recovery guarantees. Arc Mainnet V2 escrow remains unavailable until a separate audited deployment is configured. The testnet seller credentials and escrow addresses must never be reused.
 
 ### V1 Gateway tasks
 
 CSV-created V1 tasks do not escrow funds at creation. When a correct answer is accepted, the app attempts to pay the worker using the seller's Circle Gateway balance. The server signs the Gateway transfer intent and broadcasts a Gateway mint transaction on Arc. The seller wallet needs sufficient Gateway balance and the configured RPC must be reachable. A submitted transaction may remain pending or need reconciliation.
 
-The seller dashboard also includes a separate Gateway balance and withdrawal interface. It is distinct from worker V2 escrow earnings.
+The seller dashboard shows the Gateway balance on either network. The existing in-app Gateway withdrawal action remains Testnet-only until the Mainnet path has equivalent early-hash persistence, confirmed receipt, and recipient/amount checks. It is distinct from worker V2 escrow earnings.
 
 ### V2 escrow tasks
 
@@ -137,8 +137,8 @@ The `/api/premium/quote`, `/dataset`, `/compute`, and `/agent-task` routes use a
 - An Arc Testnet-compatible EVM wallet for browser flows.
 - A WalletConnect project ID for the RainbowKit configuration.
 - Supabase local services or a Supabase project configured for development.
-- An Arc Testnet RPC for development, or a verified Arc Mainnet RPC after the separately audited escrow deployment.
-- For V1 Gateway payouts, a configured seller wallet and testnet Gateway funds.
+- An Arc Testnet RPC for development, or a verified Arc Mainnet RPC for Mainnet features. V2 escrow still requires a separately audited deployment.
+- For V1 Gateway payouts, a configured seller wallet and Gateway funds on the selected environment. Mainnet uses a dedicated seller address and server-only private key.
 - For V2 reward credits, the private key for the configured network's verifier address and a worker address in the corresponding network allowlist.
 - For the optional agent, a funded testnet buyer wallet. An OpenAI API key is optional; the script documents a mock/scripted fallback.
 
@@ -202,7 +202,7 @@ Set both `ARC_NETWORK` and `NEXT_PUBLIC_ARC_NETWORK` to the same explicit value 
 | `ARC_NETWORK` | Yes | Server configuration | Selects `testnet` or `mainnet`; must match the public selector. |
 | `NEXT_PUBLIC_ARC_NETWORK` | Yes | Client-visible | Selects the same Arc network for RainbowKit, wallet status, and browser transactions. |
 | `NEXT_PUBLIC_ARC_TESTNET_RPC_URL` / `ARC_TESTNET_RPC_URL` | Optional | Public RPC / server config | Testnet RPC overrides. The server rejects an RPC whose chain ID is not 5042002. Default: `https://rpc.testnet.arc.io`. |
-| `NEXT_PUBLIC_ARC_MAINNET_RPC_URL` / `ARC_MAINNET_RPC_URL` | Required for Mainnet | Public RPC / server config | Explicit browser and server RPC endpoints. Missing values fail closed; escrow actions also reject endpoints reporting a chain ID other than 5042. |
+| `NEXT_PUBLIC_ARC_MAINNET_RPC_URL` / `ARC_MAINNET_RPC_URL` | Required for Mainnet | Public RPC / server config | Explicit browser and server RPC endpoints. Missing values fail closed; Gateway and escrow RPC operations verify chain ID 5042. |
 | `NEXT_PUBLIC_ARC_MAINNET_ESCROW_ADDRESS` | Required for Mainnet | Public contract address | Address of the separately audited and verified Mainnet escrow deployment. |
 | `ARC_MAINNET_ESCROW_ADDRESS` | Required for Mainnet | Server config | Must match the public escrow address. |
 | `NEXT_PUBLIC_ARC_MAINNET_ESCROW_CODE_HASH` | Required for Mainnet | Public runtime-code hash | Expected runtime bytecode hash from the reviewed Mainnet deployment. |
@@ -216,8 +216,10 @@ Set both `ARC_NETWORK` and `NEXT_PUBLIC_ARC_NETWORK` to the same explicit value 
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes | Client-visible | Supabase publishable/anon key used by browser and SSR clients. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes, server operations | **Server-only secret** | Privileged database access and HMAC secret for worker session cookies. Never expose it to browser code. |
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Yes for wallet UI | Client-visible | RainbowKit project configuration. |
-| `SELLER_ADDRESS` | Yes for Gateway seller features | Public address | x402 payment destination and seller Gateway balance identity. |
-| `SELLER_PRIVATE_KEY` | Testnet Gateway only | **Server-only secret** | Testnet Gateway signer. Never use for Mainnet. |
+| `SELLER_ADDRESS` | Testnet Gateway seller features | Public address | Testnet x402 payment destination and Gateway balance identity. |
+| `SELLER_PRIVATE_KEY` | Testnet Gateway payouts | **Server-only secret** | Testnet Gateway signer. Never use for Mainnet. |
+| `SELLER_MAINNET_ADDRESS` | Mainnet Gateway seller features | Server configuration | Dedicated Mainnet x402 destination and Gateway balance identity. |
+| `SELLER_MAINNET_PRIVATE_KEY` | Mainnet V1 Gateway payouts | **Server-only secret** | Dedicated Mainnet signer; the server verifies it derives to `SELLER_MAINNET_ADDRESS`. Never reuse a Testnet key. |
 | `DOIT_VERIFIER_PRIVATE_KEY` | Testnet V2 reward credit | **Server-only secret** | Testnet verifier key. Never reuse on Mainnet. |
 | `ARC_TESTNET_VERIFIER_ADDRESS` | Optional for Testnet | Server configuration | Expected testnet verifier address; defaults to the current testnet deployment. |
 | `DOIT_V2_TEST_WORKERS` | Testnet V2 submissions | Server configuration | Testnet worker allowlist. It does not restrict direct contract calls. |
@@ -227,7 +229,7 @@ Set both `ARC_NETWORK` and `NEXT_PUBLIC_ARC_NETWORK` to the same explicit value 
 | `DEPOSIT_AMOUNT` | Optional; agent only | Local configuration | USDC amount the agent deposits; defaults to `1`. |
 | `PORT` | Optional | Local configuration | Port used by the development server/runtime when supported. |
 
-`BUYER_ADDRESS` appears in `.env.example`, but the current agent derives its wallet address from `BUYER_PRIVATE_KEY` and does not read `BUYER_ADDRESS`. The agent and Circle Gateway paths are testnet-only. Never put private keys, service-role keys, or OpenAI keys in `NEXT_PUBLIC_*` variables or client components. `.env.example` distinguishes public browser settings from server-only signing secrets.
+`BUYER_ADDRESS` appears in `.env.example`, but the current agent derives its wallet address from `BUYER_PRIVATE_KEY` and does not read `BUYER_ADDRESS`. The agent remains testnet-only. Never put private keys, service-role keys, or OpenAI keys in `NEXT_PUBLIC_*` variables or client components. `.env.example` distinguishes public browser settings from server-only signing secrets.
 
 ## Usage Guide
 
