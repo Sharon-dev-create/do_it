@@ -199,7 +199,7 @@ Set both `ARC_NETWORK` and `NEXT_PUBLIC_ARC_NETWORK` to the same explicit value 
 | --- | --- | --- | --- |
 | `ARC_NETWORK` | Yes | Server configuration | Selects `testnet` or `mainnet`; must match the public selector. |
 | `NEXT_PUBLIC_ARC_NETWORK` | Yes | Client-visible | Selects the same Arc network for RainbowKit, wallet status, and browser transactions. |
-| `NEXT_PUBLIC_ARC_TESTNET_RPC_URL` / `ARC_TESTNET_RPC_URL` | Optional | Public RPC / server config | Testnet RPC overrides. The server rejects an RPC whose chain ID is not 5042002. |
+| `NEXT_PUBLIC_ARC_TESTNET_RPC_URL` / `ARC_TESTNET_RPC_URL` | Optional | Public RPC / server config | Testnet RPC overrides. The server rejects an RPC whose chain ID is not 5042002. Default: `https://rpc.testnet.arc.io`. |
 | `NEXT_PUBLIC_ARC_MAINNET_RPC_URL` / `ARC_MAINNET_RPC_URL` | Optional | Public RPC / server config | Mainnet RPC overrides. The server rejects an RPC whose chain ID is not 5042. |
 | `NEXT_PUBLIC_ARC_MAINNET_ESCROW_ADDRESS` | Required for Mainnet | Public contract address | Address of the separately audited and verified Mainnet escrow deployment. |
 | `ARC_MAINNET_ESCROW_ADDRESS` | Required for Mainnet | Server config | Must match the public escrow address. |
@@ -299,7 +299,7 @@ The V2 ABI and network-selected escrow address are in `lib/contracts/doItEscrow.
 - There is no reviewed or verified Arc Mainnet escrow deployment in this repository. Deploy and independently verify a new contract; never reuse the testnet address.
 - Provide the deployment block, verifier address, and exact runtime bytecode hash from the reviewed deployment. The application checks the configured chain ID, contract code hash, escrow USDC address, verifier address, and USDC ERC-20 decimals on both the browser and server before Mainnet escrow actions.
 - Use a new, mainnet-only verifier key in `DOIT_MAINNET_VERIFIER_PRIVATE_KEY`. Do not reuse `SELLER_PRIVATE_KEY`, `DOIT_VERIFIER_PRIVATE_KEY`, `BUYER_PRIVATE_KEY`, or any testnet wallet/key.
-- Circle's current Gateway documentation lists Arc Mainnet as `arc` and nanopayments as supported. The installed `@circle-fin/x402-batching` SDK does not expose an Arc Mainnet chain configuration, so Gateway- and x402-backed flows remain intentionally unavailable on Mainnet until the application uses a Circle-supported SDK integration for `arc`.
+- Circle's current Gateway documentation lists Arc Mainnet as `arc` and nanopayments as supported. The installed `@circle-fin/x402-batching` SDK (`2.0.4`) does not expose an Arc Mainnet chain configuration, so Gateway- and x402-backed flows remain intentionally unavailable on Mainnet until the application uses a Circle-supported SDK integration for `arc`.
 - Configure `ARC_NETWORK=mainnet` and `NEXT_PUBLIC_ARC_NETWORK=mainnet` only in the production environment. Keep development and preview environments explicitly set to `testnet`.
 - Use a distinct production Supabase project and apply only the reviewed forward migrations there. No schema migration is required just to select Mainnet when the production project is isolated; task and payment tables otherwise lack a general network discriminator.
 - Configure Vercel environment variables by environment (Production versus Preview/Development); no tracked Vercel environment file is provided. Public chain addresses, RPC URLs, and WalletConnect ID may use `NEXT_PUBLIC_*`; all signing keys, Supabase service-role keys, and server-only selectors must remain server-side.

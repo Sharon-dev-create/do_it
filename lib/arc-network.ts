@@ -46,7 +46,7 @@ export function getArcNetworkConfig(
     name,
     label: "Arc Testnet",
     chainId: 5042002,
-    rpcUrl: rpcOverride || "https://rpc.testnet.arc.network",
+    rpcUrl: rpcOverride || "https://rpc.testnet.arc.io",
     explorerUrl: "https://explorer.testnet.arc.io",
     usdcAddress: ARC_USDC_ADDRESS,
     usdcDecimals: 6,
