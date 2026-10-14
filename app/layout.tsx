@@ -22,14 +22,29 @@ import { Toaster } from "sonner";
 import { Providers } from "@/app/providers";
 import "./globals.css";
 
-const defaultUrl = process.env.VERCEL_URL
-  ? `https://${process.env.VERCEL_URL}`
-  : "http://localhost:3000";
-
 export const metadata: Metadata = {
-  metadataBase: new URL(defaultUrl),
-  title: "do-it",
-  description: "do-it nanopayments application",
+  ...(process.env.VERCEL_URL
+    ? { metadataBase: new URL(`https://${process.env.VERCEL_URL}`) }
+    : {}),
+  title: "Do-It",
+  description:
+    "A task marketplace for useful work and USDC micropayments on Arc Testnet.",
+  icons: {
+    icon: [{ url: "/brand/do-it-mark.png", type: "image/png" }],
+    apple: [{ url: "/brand/do-it-mark.png", type: "image/png" }],
+  },
+  openGraph: {
+    title: "Do-It",
+    description:
+      "A task marketplace for useful work and USDC micropayments on Arc Testnet.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Do-It",
+    description:
+      "A task marketplace for useful work and USDC micropayments on Arc Testnet.",
+  },
 };
 
 

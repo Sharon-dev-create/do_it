@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { BrandLink } from "@/components/brand-link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { decodeEventLog, parseUnits } from "viem";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
@@ -249,9 +250,7 @@ export default function CreateTaskPage() {
     <main className="min-h-screen bg-[#f4f3f1] text-[#111111]">
       <div className="mx-auto max-w-5xl px-6 py-10">
         <header className="mb-10 flex items-center justify-between gap-4">
-          <Link href="/" className="text-lg font-semibold tracking-[0.2em] text-[#111111]">
-            DO-IT<span className="text-[#e87513]">.</span>
-          </Link>
+          <BrandLink />
           <Link href="/dashboard" className="rounded-full border border-[#d7d5d3] px-4 py-2 text-sm text-[#111111] hover:border-[#111111]">
             Back to dashboard
           </Link>

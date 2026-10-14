@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUpRight, Search } from "lucide-react";
+import { BrandLink } from "@/components/brand-link";
 
 type Mission = {
   id: string;
@@ -70,7 +71,7 @@ export default function TaskMarketplace() {
   return (
     <main className="doit-shell marketplace-page">
       <header className="doit-nav">
-        <Link href="/" className="brand">DO-IT<span className="brand-period">.</span></Link>
+        <BrandLink />
         <nav aria-label="Main navigation">
           <Link className="nav-current" href="/tasks">Missions</Link>
           <Link href="/#network">Navigation</Link>
@@ -116,7 +117,7 @@ export default function TaskMarketplace() {
         ))}
       </section>
 
-      <footer className="market-footer"><span>DO-IT · Autonomous task marketplace</span><span className="mono">MISSIONS ARE VERIFIED BEFORE USDC SETTLEMENT</span></footer>
+      <footer className="market-footer"><span className="footer-brand"><BrandLink compact />· Autonomous task marketplace</span><span className="mono">MISSIONS ARE VERIFIED BEFORE USDC SETTLEMENT</span></footer>
     </main>
   );
 }

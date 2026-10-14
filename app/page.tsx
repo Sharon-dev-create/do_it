@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { usePaymentEvents } from "@/hooks/use-transactions";
+import { BrandLink } from "@/components/brand-link";
 
 type Task = {
   id: string;
@@ -76,7 +77,7 @@ export default function Home() {
   return (
     <main className="doit-shell">
       <header className="doit-nav">
-        <Link href="/" className="brand">DO-IT<span className="brand-period">.</span></Link>
+        <BrandLink />
         <nav aria-label="Main navigation">
           <a href="#missions">Missions</a><a href="#network">Navigation</a><Link href="/payments">Payments</Link><a href="#agents">Agents</a>
         </nav>
@@ -118,8 +119,8 @@ export default function Home() {
         {latestTasks.length ? <div className="mission-table"><div className="table-head"><span>MISSION</span><span>TYPE</span><span>REWARD</span><span>STATUS</span></div>{latestTasks.map((task,index)=><Link className="mission-row" href={`/tasks/${task.id}`} key={task.id}><span className="mission-id mono">#{task.id.slice(0,8).toUpperCase()}</span><span className="mission-title">{task.title}</span><span className="reward mono">{Number(task.reward_usdc).toFixed(3)} USDC</span><span className="status-open"><i/> Open <span className="row-arrow">↗</span></span></Link>)}</div> : <div className="empty-missions"><span className="mono">{tasksLoading ? "SYNCING TASK FEED…" : "NO OPEN MISSIONS"}</span><p>{tasksLoading ? "Connecting to the task network." : "New tasks will appear here when they are posted."}</p><Link href="/create-task">Launch a mission <span>→</span></Link></div>}
       </section>
 
-      <section className="closing-panel"><div><span className="eyebrow">DO-IT / MISSION CONTROL</span><h2>Ready for a<br/>new mission.</h2><p>Launch work into the network and let autonomous workers execute it.</p><Link href="/create-task" className="button-light">Create task <ArrowUpRight size={15}/></Link></div><div className="event-log"><span>NETWORK LOG / LIVE FEED</span><p><b>01</b> Mission routes to verification</p><p><b>02</b> Work checked against task criteria</p><p><b>03</b> USDC settlement on Arc</p><p className="log-current"><b>04</b> Awaiting next mission<span className="cursor-dot"/></p></div></section>
-      <footer className="doit-footer"><span>DO-IT · Autonomous task marketplace</span><span className="mono">USDC&nbsp; · &nbsp;ARC TESTNET&nbsp; · &nbsp;CHAIN 5042002</span></footer>
+      <section className="closing-panel"><div><span className="eyebrow">Do-It / MISSION CONTROL</span><h2>Ready for a<br/>new mission.</h2><p>Launch work into the network and let autonomous workers execute it.</p><Link href="/create-task" className="button-light">Create task <ArrowUpRight size={15}/></Link></div><div className="event-log"><span>NETWORK LOG / LIVE FEED</span><p><b>01</b> Mission routes to verification</p><p><b>02</b> Work checked against task criteria</p><p><b>03</b> USDC settlement on Arc</p><p className="log-current"><b>04</b> Awaiting next mission<span className="cursor-dot"/></p></div></section>
+      <footer className="doit-footer"><span className="footer-brand"><BrandLink compact />· Autonomous task marketplace</span><span className="mono">USDC&nbsp; · &nbsp;ARC TESTNET&nbsp; · &nbsp;CHAIN 5042002</span></footer>
     </main>
   );
 }
