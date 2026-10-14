@@ -10,6 +10,7 @@ import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscr
 import { isAddress } from "viem";
 import { getWorkerSessionChallengeMessage } from "@/lib/worker-session-auth";
 import { getTaskSubmissionNotice, postTaskAnswer } from "@/lib/task-submission-client";
+import { BrandLink } from "@/components/brand-link";
 
 type Task = {
   id: string;
@@ -36,6 +37,15 @@ type SubmitResult = {
   paymentId?: string;
   requiresReconciliation?: boolean;
 };
+
+function TaskDetailHeader() {
+  return (
+    <header className="doit-nav task-detail-nav">
+      <BrandLink />
+      <ConnectButton />
+    </header>
+  );
+}
 
 function TaskDetailContent() {
   const params = useParams<{ id: string }>();
@@ -276,6 +286,7 @@ function TaskDetailContent() {
   if (loading) {
     return (
       <main className="doit-shell">
+        <TaskDetailHeader />
         <section className="task-detail-state">
           <div className="eyebrow">TASK / LOADING</div>
           <h1>
@@ -290,6 +301,7 @@ function TaskDetailContent() {
   if (!task) {
     return (
       <main className="doit-shell">
+        <TaskDetailHeader />
         <section className="task-detail-state">
           <div className="eyebrow">TASK / 404</div>
           <h1>
@@ -308,9 +320,7 @@ function TaskDetailContent() {
   const isOpen = task.status === "open" || Boolean(pendingClaim) || Boolean(result?.requiresReconciliation);
   return (
     <main className="doit-shell">
-      <div>
-        <ConnectButton />
-      </div>
+      <TaskDetailHeader />
 
       <section className="task-detail-heading">
         <div>
@@ -477,5 +487,5 @@ function TaskDetailContent() {
 }
 
 export default function TaskDetailPage() {
-  return <Suspense fallback={<main className="doit-shell"><section className="task-detail-state"><div className="eyebrow">TASK / LOADING</div><h1>Loading<span>.</span></h1><p>Fetching the mission details.</p></section></main>}><TaskDetailContent /></Suspense>;
+  return <Suspense fallback={<main className="doit-shell"><TaskDetailHeader /><section className="task-detail-state"><div className="eyebrow">TASK / LOADING</div><h1>Loading<span>.</span></h1><p>Fetching the mission details.</p></section></main>}><TaskDetailContent /></Suspense>;
 }

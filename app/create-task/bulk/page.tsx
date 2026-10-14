@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAccount, useSignMessage } from "wagmi";
 import { isAddress } from "viem";
+import { BrandLink } from "@/components/brand-link";
 import { getWorkerSessionChallengeMessage } from "@/lib/worker-session-auth";
 import { BULK_TASK_MAX_FILE_BYTES, BULK_TASK_MAX_ROWS, BulkTaskRow, csvEscape, isValidRewardAmount, parseBulkTaskCsv, ParsedBulkRow } from "@/lib/bulk-task-csv";
 
@@ -115,7 +116,10 @@ function BulkCreator() {
   }
 
   return <main className="mx-auto max-w-6xl px-5 py-10">
-    <Link href="/dashboard" className="text-sm underline">← Dashboard</Link>
+    <header className="mb-8 flex items-center justify-between gap-4 border-b pb-4">
+      <BrandLink compact />
+      <Link href="/dashboard" className="text-sm underline">← Dashboard</Link>
+    </header>
     <h1 className="mt-4 text-3xl font-semibold">Create tasks in bulk</h1>
     <div className="my-5 rounded-lg border border-amber-500/40 bg-amber-50 p-4 text-sm text-amber-950"><strong>V1 Gateway tasks · no upfront deposit.</strong> CSV bulk creation uses the existing V1 Gateway payment path. Creating a task does not deposit USDC or guarantee Gateway funding; payment is attempted under the existing rules when a valid answer is accepted. This does not create V2 escrow allocations. Quantities are not supported by the current task schema.</div>
     {!isConnected && <p className="my-4">Connect the creator wallet using the wallet control in the site header.</p>}
@@ -138,4 +142,4 @@ function BulkCreator() {
   </main>;
 }
 
-export default function BulkTaskPage() { return <Suspense fallback={<main className="p-8">Loading task creator…</main>}><BulkCreator /></Suspense>; }
+export default function BulkTaskPage() { return <Suspense fallback={<main className="mx-auto max-w-6xl px-5 py-8"><BrandLink compact /><p className="mt-6">Loading task creator…</p></main>}><BulkCreator /></Suspense>; }
