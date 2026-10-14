@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { TopBarGatewayControls } from "@/components/dashboard/top-bar-gateway-controls";
 import { LogOut } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function DashboardLayout({
   children,
@@ -32,6 +33,7 @@ export default function DashboardLayout({
       <header className="border-b">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <TopBarGatewayControls />
+          <ThemeToggle />
           <ConnectButton />
           <form action={logout}>
             <Button variant="ghost" size="icon" type="submit">
