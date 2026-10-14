@@ -68,8 +68,8 @@ function buildPaymentRequirements(
 /**
  * Wraps a Next.js route handler with Circle Gateway payment verification.
  *
- * Follows fred-mvp's approach: manually constructs payment requirements with
- * the Gateway batching `extra` field and calls BatchFacilitatorClient directly.
+ * Builds server-authoritative requirements from Circle's currently advertised
+ * Gateway payment kind before verifying and settling each payment.
  */
 export function withGateway(
   handler: (req: NextRequest) => Promise<NextResponse>,
