@@ -12,7 +12,8 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { decodeEventLog, parseUnits } from "viem";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
-import { ARC_TESTNET_USDC, ERC20_ABI } from "@/lib/contracts/usdc";
+import { ARC_USDC_ADDRESS, ERC20_ABI } from "@/lib/contracts/usdc";
+import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 
 async function waitForArcReceipt(
   publicClient: NonNullable<ReturnType<typeof usePublicClient>>,
@@ -95,12 +96,12 @@ export default function CreateTaskPage() {
     }
 
     if (!publicClient) {
-      setError("The Arc Testnet blockchain client is unavailable. Refresh and try again.");
+      setError(`The ${ARC_NETWORK_CONFIG.label} blockchain client is unavailable. Refresh and try again.`);
       return;
     }
 
-    if (chainId !== 5042002) {
-      setError("Switch your wallet to Arc Testnet before creating a task.");
+    if (chainId !== ARC_NETWORK_CONFIG.chainId) {
+      setError(`Switch your wallet to ${ARC_NETWORK_CONFIG.label} before creating a task.`);
       return;
     }
 
@@ -133,7 +134,7 @@ export default function CreateTaskPage() {
         abi: DO_IT_ESCROW_ABI,
         functionName: "createTask",
         args: [reward],
-        chainId: 5042002,
+        chainId: ARC_NETWORK_CONFIG.chainId,
       });
       const createReceipt = await publicClient.waitForTransactionReceipt({
         hash: createTxHash,
@@ -167,11 +168,11 @@ export default function CreateTaskPage() {
       stage = "Approving USDC";
       setProgress("Approving USDC...");
       const approvalTxHash = await writeContractAsync({
-        address: ARC_TESTNET_USDC,
+        address: ARC_USDC_ADDRESS,
         abi: ERC20_ABI,
         functionName: "approve",
         args: [DO_IT_ESCROW_ADDRESS, reward],
-        chainId: 5042002,
+        chainId: ARC_NETWORK_CONFIG.chainId,
       });
 
       const approvalReceipt = await publicClient.waitForTransactionReceipt({
@@ -188,7 +189,7 @@ export default function CreateTaskPage() {
         abi: DO_IT_ESCROW_ABI,
         functionName: "fundTask",
         args: [blockchainTaskId],
-        chainId: 5042002,
+        chainId: ARC_NETWORK_CONFIG.chainId,
       });
       const fundReceipt = await publicClient.waitForTransactionReceipt({
         hash: fundTxHash,

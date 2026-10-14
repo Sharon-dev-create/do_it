@@ -1,5 +1,6 @@
-export const ARC_TESTNET_USDC =
-  "0x3600000000000000000000000000000000000000" as const;
+import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
+
+export const ARC_USDC_ADDRESS = ARC_NETWORK_CONFIG.usdcAddress;
 
 export const ERC20_ABI = [
   {

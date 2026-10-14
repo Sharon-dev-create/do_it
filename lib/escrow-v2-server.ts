@@ -3,32 +3,62 @@ import { createPublicClient, createWalletClient, http, isAddress, parseUnits, ty
 import { privateKeyToAccount } from "viem/accounts";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { isV2TestWorkerAllowed } from "@/lib/v2-test-workers";
+import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
+import { getConfiguredVerifierAddress, SERVER_ARC_NETWORK_CONFIG } from "@/lib/arc-network-server";
 
-export const ARC_CHAIN_ID = 5042002;
-export const ARC_EXPLORER = "https://testnet.arcscan.app";
-export const V2_VERIFIER = "0x41aa5227695B8c6c5FfAD3bF3A9aAF0626921d0E" as const;
+export const ARC_CHAIN_ID = ARC_NETWORK_CONFIG.chainId;
+export const ARC_EXPLORER = ARC_NETWORK_CONFIG.explorerUrl;
+export const V2_VERIFIER = getConfiguredVerifierAddress();
 
-const arcTestnet = {
+const arcChain = {
   id: ARC_CHAIN_ID,
-  name: "Arc Testnet",
-  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 6 },
-  rpcUrls: { default: { http: [process.env.ARC_TESTNET_RPC_URL || "https://rpc.testnet.arc.network"] } },
+  name: ARC_NETWORK_CONFIG.label,
+  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: ARC_NETWORK_CONFIG.nativeCurrencyDecimals },
+  rpcUrls: { default: { http: [SERVER_ARC_NETWORK_CONFIG.rpcUrl] } },
 } as const;
 
-export const escrowPublicClient = createPublicClient({ chain: arcTestnet, transport: http() });
+export const escrowPublicClient = createPublicClient({ chain: arcChain, transport: http(SERVER_ARC_NETWORK_CONFIG.rpcUrl) });
 
 export function getVerifierWalletClient() {
   const key = process.env.DOIT_VERIFIER_PRIVATE_KEY || process.env.SELLER_PRIVATE_KEY;
   if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("V2 verifier signer is not configured");
   const account = privateKeyToAccount(key as `0x${string}`);
   if (account.address.toLowerCase() !== V2_VERIFIER.toLowerCase()) {
-    throw new Error("Configured V2 verifier signer does not match the deployed verifier");
+    throw new Error(`Configured ${ARC_NETWORK_CONFIG.label} verifier signer does not match the configured verifier address`);
   }
-  return createWalletClient({ account, chain: arcTestnet, transport: http() });
+  return createWalletClient({ account, chain: arcChain, transport: http(SERVER_ARC_NETWORK_CONFIG.rpcUrl) });
 }
 
 export function isConfiguredV2TestWorker(address: string): boolean {
   return isV2TestWorkerAllowed(address, process.env.DOIT_V2_TEST_WORKERS);
+}
+
+export async function assertArcEscrowDeployment() {
+  if (await escrowPublicClient.getChainId() !== ARC_CHAIN_ID) {
+    throw new Error(`${ARC_NETWORK_CONFIG.label} RPC chain ID does not match the selected network.`);
+  }
+  const bytecode = await escrowPublicClient.getCode({ address: DO_IT_ESCROW_ADDRESS });
+  if (!bytecode || bytecode === "0x") {
+    throw new Error(`No escrow contract is deployed at the configured ${ARC_NETWORK_CONFIG.label} address.`);
+  }
+  const [tokenAddress, verifierAddress] = await Promise.all([
+    escrowPublicClient.readContract({
+      address: DO_IT_ESCROW_ADDRESS,
+      abi: DO_IT_ESCROW_ABI,
+      functionName: "usdc",
+    }),
+    escrowPublicClient.readContract({
+      address: DO_IT_ESCROW_ADDRESS,
+      abi: DO_IT_ESCROW_ABI,
+      functionName: "verifier",
+    }),
+  ]);
+  if (tokenAddress.toLowerCase() !== ARC_NETWORK_CONFIG.usdcAddress.toLowerCase()) {
+    throw new Error(`Configured escrow uses an unexpected USDC address on ${ARC_NETWORK_CONFIG.label}.`);
+  }
+  if (verifierAddress.toLowerCase() !== V2_VERIFIER.toLowerCase()) {
+    throw new Error(`Configured escrow verifier does not match the ${ARC_NETWORK_CONFIG.label} verifier address.`);
+  }
 }
 
 export function getV2TaskId(value: unknown): bigint | null {
@@ -46,6 +76,7 @@ export async function verifyV2TaskRecord(task: {
   created_by: string;
   reward_usdc: number | string;
 }) {
+  await assertArcEscrowDeployment();
   const taskId = getV2TaskId(task.blockchain_task_id);
   if (taskId === null) throw new Error("Task has no valid V2 chain ID");
   const state = await escrowPublicClient.readContract({

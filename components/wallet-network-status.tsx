@@ -1,21 +1,20 @@
 "use client";
 
 import { useAccount } from "wagmi";
-
-const ARC_TESTNET_CHAIN_ID = 5042002;
+import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 
 export function WalletNetworkStatus() {
   const { isConnected, chainId } = useAccount();
-  const onArcTestnet = isConnected && chainId === ARC_TESTNET_CHAIN_ID;
+  const onSelectedArcNetwork = isConnected && chainId === ARC_NETWORK_CONFIG.chainId;
   const label = !isConnected
     ? "Wallet disconnected"
-    : onArcTestnet
-      ? "Arc Testnet connected"
-      : "Switch to Arc Testnet";
+    : onSelectedArcNetwork
+      ? `${ARC_NETWORK_CONFIG.label} connected`
+      : `Switch to ${ARC_NETWORK_CONFIG.label}`;
 
   return (
     <span
-      className={`network-online${!onArcTestnet ? " network-not-ready" : ""}`}
+      className={`network-online${!onSelectedArcNetwork ? " network-not-ready" : ""}`}
       role="status"
     >
       <i aria-hidden="true" />

@@ -5,9 +5,8 @@ import { decodeEventLog, formatUnits, isAddress, parseUnits } from "viem";
 import { useAccount, useReadContract, usePublicClient, useSignMessage, useWriteContract } from "wagmi";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { getWorkerWithdrawalEventKey, meetsWorkerWithdrawalMinimum } from "@/lib/worker-withdrawal-auth";
+import { ARC_CHAIN_ID, ARC_EXPLORER, ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 
-const explorer = "https://testnet.arcscan.app";
-const ARC_TESTNET_CHAIN_ID = 5042002;
 const PAGE_SIZE = 25;
 
 type WithdrawalHistoryItem = {
@@ -51,7 +50,7 @@ export function EscrowEarnings() {
     abi: DO_IT_ESCROW_ABI,
     functionName: "availableBalance",
     args: address ? [address] : undefined,
-    query: { enabled: Boolean(address && chainId === 5042002), refetchInterval: 12_000, refetchOnWindowFocus: true },
+    query: { enabled: Boolean(address && chainId === ARC_CHAIN_ID), refetchInterval: 12_000, refetchOnWindowFocus: true },
   });
 
   useEffect(() => {
@@ -135,15 +134,15 @@ export function EscrowEarnings() {
   async function withdraw() {
     setError(""); setTxHash(null);
     if (!address || !isAddress(address)) return setError("Connect a valid worker wallet first.");
-    if (chainId !== ARC_TESTNET_CHAIN_ID) return setError("Switch your wallet to Arc Testnet.");
-    if (!publicClient) return setError("Arc Testnet RPC is unavailable.");
+    if (chainId !== ARC_CHAIN_ID) return setError(`Switch your wallet to ${ARC_NETWORK_CONFIG.label}.`);
+    if (!publicClient) return setError(`${ARC_NETWORK_CONFIG.label} RPC is unavailable.`);
     let units: bigint;
     try { units = parseUnits(amount, 6); } catch { return setError("Enter a valid USDC amount with up to six decimals."); }
     if (units <= 0n) return setError("Withdrawal amount must be greater than zero.");
     if (typeof balance !== "bigint" || units > balance) return setError("Amount exceeds your available escrow earnings.");
     setBusy(true);
     try {
-      const hash = await writeContractAsync({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, functionName: "withdraw", args: [units], chainId: 5042002 });
+      const hash = await writeContractAsync({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, functionName: "withdraw", args: [units], chainId: ARC_CHAIN_ID });
       setTxHash(hash);
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error("Withdrawal transaction reverted.");
@@ -178,7 +177,7 @@ export function EscrowEarnings() {
       setAmount("");
       await refetch();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Withdrawal failed. Check your wallet and Arc Testnet connection.");
+      setError(cause instanceof Error ? cause.message : `Withdrawal failed. Check your wallet and ${ARC_NETWORK_CONFIG.label} connection.`);
     } finally { setBusy(false); }
   }
 
@@ -190,20 +189,20 @@ export function EscrowEarnings() {
       </div>
       <div className="text-right">
         <p className="text-xs uppercase tracking-wide text-muted-foreground">Available</p>
-        <p className="text-2xl font-semibold">{address && chainId === 5042002 && typeof balance === "bigint" ? formatUnits(balance, 6) : "—"} <span className="text-sm">USDC</span></p>
+        <p className="text-2xl font-semibold">{address && chainId === ARC_CHAIN_ID && typeof balance === "bigint" ? formatUnits(balance, ARC_NETWORK_CONFIG.usdcDecimals) : "—"} <span className="text-sm">USDC</span></p>
       </div>
     </div>
-    {!address ? <p className="mt-4 text-sm text-muted-foreground">Connect your worker wallet to read escrow earnings.</p> : chainId !== ARC_TESTNET_CHAIN_ID ? <p className="mt-4 text-sm text-[var(--doit-brand-warning)]">Switch to Arc Testnet to read and withdraw V2 earnings.</p> : null}
-    {address && chainId === ARC_TESTNET_CHAIN_ID && typeof balance === "bigint" && <div className="mt-3 text-sm">
+    {!address ? <p className="mt-4 text-sm text-muted-foreground">Connect your worker wallet to read escrow earnings.</p> : chainId !== ARC_CHAIN_ID ? <p className="mt-4 text-sm text-[var(--doit-brand-warning)]">Switch to {ARC_NETWORK_CONFIG.label} to read and withdraw V2 earnings.</p> : null}
+    {address && chainId === ARC_CHAIN_ID && typeof balance === "bigint" && <div className="mt-3 text-sm">
       <span className="font-medium">$1.00 app withdrawal eligibility: </span>
       <span>{meetsWorkerWithdrawalMinimum(balance) ? "Eligible" : "Not yet eligible"}</span>
       <p className="mt-1 text-xs text-muted-foreground">Display indicator only in this phase. The existing contract accepts any positive withdrawal amount.</p>
     </div>}
-    {readError && <p className="mt-3 text-sm text-[var(--doit-brand-error)]">Unable to read your V2 escrow balance. Check the Arc Testnet RPC.</p>}
+    {readError && <p className="mt-3 text-sm text-[var(--doit-brand-error)]">Unable to read your V2 escrow balance. Check the {ARC_NETWORK_CONFIG.label} RPC.</p>}
     {isLoading && <p className="mt-3 text-sm text-muted-foreground">Loading escrow balance…</p>}
     <div className="mt-4 flex flex-wrap gap-2">
-      <input aria-label="USDC amount to withdraw" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Amount (USDC)" className="h-10 w-44 rounded-md border bg-background px-3 text-sm" disabled={busy || isPending || !address || chainId !== 5042002} />
-      <button type="button" onClick={withdraw} disabled={busy || isPending || !address || chainId !== 5042002} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{busy || isPending ? "Withdrawing…" : "Withdraw earnings"}</button>
+      <input aria-label="USDC amount to withdraw" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Amount (USDC)" className="h-10 w-44 rounded-md border bg-background px-3 text-sm" disabled={busy || isPending || !address || chainId !== ARC_CHAIN_ID} />
+      <button type="button" onClick={withdraw} disabled={busy || isPending || !address || chainId !== ARC_CHAIN_ID} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{busy || isPending ? "Withdrawing…" : "Withdraw earnings"}</button>
     </div>
     {error && <p role="alert" className="mt-3 text-sm text-[var(--doit-brand-error)]">{error}</p>}
     {txHash && <p className="mt-3 text-sm">Withdrawal transaction: <a className="underline" href={`${explorer}/tx/${txHash}`} target="_blank" rel="noreferrer">{txHash}</a></p>}
