@@ -6,6 +6,10 @@ import { useSearchParams } from "next/navigation";
 import { useAccount, useSignMessage } from "wagmi";
 import { isAddress } from "viem";
 import { BrandLink } from "@/components/brand-link";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { getWorkerSessionChallengeMessage } from "@/lib/worker-session-auth";
 import { BULK_TASK_MAX_FILE_BYTES, BULK_TASK_MAX_ROWS, BulkTaskRow, csvEscape, isValidRewardAmount, parseBulkTaskCsv, ParsedBulkRow } from "@/lib/bulk-task-csv";
 
@@ -115,31 +119,266 @@ function BulkCreator() {
     finally { setBusy(false); }
   }
 
-  return <main className="mx-auto max-w-6xl px-5 py-10">
-    <header className="mb-8 flex items-center justify-between gap-4 border-b pb-4">
-      <BrandLink compact />
-      <Link href="/dashboard" className="text-sm underline">← Dashboard</Link>
-    </header>
-    <h1 className="mt-4 text-3xl font-semibold">Create tasks in bulk</h1>
-    <div className="my-5 rounded-lg border border-amber-500/40 bg-amber-50 p-4 text-sm text-amber-950"><strong>V1 Gateway tasks · no upfront deposit.</strong> CSV bulk creation uses the existing V1 Gateway payment path. Creating a task does not deposit USDC or guarantee Gateway funding; payment is attempted under the existing rules when a valid answer is accepted. This does not create V2 escrow allocations. Quantities are not supported by the current task schema.</div>
-    {!isConnected && <p className="my-4">Connect the creator wallet using the wallet control in the site header.</p>}
-    {isConnected && !authorized && <button className="rounded border px-4 py-2" disabled={authorizing} onClick={authorize}>{authorizing ? "Authorizing…" : "Authorize creator wallet"}</button>}
-    {authorized && <>
-      {sourceId && <div className="my-4 rounded border p-3 text-sm"><label>Copies of this task template (copied: title, description, reward, and expected answer; every task gets a new ID and has no copied submissions or payment history): <input className="ml-2 w-20 rounded border p-1" type="number" min={1} max={BULK_TASK_MAX_ROWS} value={copies} onChange={(e) => setCopies(Math.max(1, Math.min(BULK_TASK_MAX_ROWS, Number(e.target.value) || 1)))} /></label><button className="ml-3 underline" onClick={() => { setDuplicateLoaded(false); setRows([]); }}>Reload template copies</button></div>}
-      <div className="my-4 flex flex-wrap gap-3"><input type="file" accept=".csv,text/csv" onChange={(e) => void loadFile(e.target.files?.[0])} /><button className="rounded border px-3 py-2 text-sm" onClick={() => download("doit-task-template.csv", `title,description,reward_usdc,correct_answer\n${csvEscape("Example task")},${csvEscape("Describe the task requirements here")},1.00,${csvEscape("example answer")}`)}>Download CSV template</button></div>
-      <p className="text-xs text-muted-foreground">CSV size limit: 2 MB. Maximum: {BULK_TASK_MAX_ROWS} rows. Required columns, in order: title, description, reward_usdc, correct_answer.</p>
-      {!!rows.length && <>
-        <div className="my-4 flex flex-wrap items-center justify-between gap-3"><span>{validRows.length} valid for creation · {invalidRows.length} excluded with errors</span><label className="text-sm"><input type="checkbox" checked={allowDuplicates} onChange={(e) => setAllowDuplicates(e.target.checked)} /> Allow exact duplicate rows (useful for template copies)</label>{invalidRows.length > 0 && <button className="underline" onClick={downloadInvalid}>Download invalid-row report</button>}</div>
-        <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm"><thead><tr className="border-b"><th className="p-2">Row</th><th className="p-2">Title</th><th className="p-2">Description</th><th className="p-2">Reward USDC</th><th className="p-2">Expected answer</th><th className="p-2">Validation</th></tr></thead><tbody>{rows.map((row, i) => {
-          const onlyDuplicate = allowDuplicates && row.errors.length > 0 && row.errors.every((e) => e.startsWith("Duplicate of CSV row"));
-          const valid = row.errors.length === 0 || onlyDuplicate;
-          return <tr key={row.rowNumber} className="border-b align-top"><td className="p-2">{row.rowNumber}</td>{(["title", "description", "reward_usdc", "correct_answer"] as const).map((key) => <td className="p-2" key={key}><input className="w-full min-w-28 rounded border p-1" value={row.task[key]} onChange={(e) => edit(i, key, e.target.value)} /></td>)}<td className={`p-2 ${valid ? "text-green-700" : "text-red-700"}`}>{valid ? (onlyDuplicate ? "Duplicate included by choice" : "Valid") : row.errors.join("; ")}</td></tr>;
-        })}</tbody></table></div>
-        <button className="mt-5 rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50" disabled={busy || !validRows.length} onClick={() => void submit()}>{busy ? "Creating batch…" : `Create ${validRows.length} V1 task(s)`}</button>
-      </>}
-    </>}
-    {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}{message && <p role="status" className="mt-4 text-sm text-green-700">{message}</p>}
-  </main>;
+  return (
+    <main className="doit-shell bulk-task-shell">
+      <header className="doit-nav task-detail-nav bulk-task-nav">
+        <BrandLink compact />
+        <div className="bulk-task-nav-actions">
+          <Link href="/dashboard" className="text-action">Dashboard</Link>
+          <ConnectButton />
+        </div>
+      </header>
+
+      <section className="bulk-task-content">
+        <div className="eyebrow">CREATOR TOOLS / CSV</div>
+        <h1>Create tasks in bulk<span>.</span></h1>
+        <div className="bulk-task-note">
+          <strong>V1 Gateway tasks · no upfront deposit.</strong>{" "}
+          CSV bulk creation uses the existing V1 Gateway payment path. Creating a
+          task does not deposit USDC or guarantee Gateway funding; payment is
+          attempted under the existing rules when a valid answer is accepted.
+          This does not create V2 escrow allocations. Quantities are not supported
+          by the current task schema.
+        </div>
+
+        {!isConnected && (
+          <p className="bulk-task-hint" role="status">
+            Connect a creator wallet to authorize and create tasks.
+          </p>
+        )}
+        {isConnected && !authorized && (
+          <Button type="button" disabled={authorizing} onClick={authorize}>
+            {authorizing ? "Authorizing…" : "Authorize creator wallet"}
+          </Button>
+        )}
+
+        {authorized && (
+          <div className="bulk-task-workspace">
+            {sourceId && (
+              <div className="bulk-task-template">
+                <Label htmlFor="bulk-template-copies">
+                  Copies of this task template
+                </Label>
+                <p>
+                  Title, description, reward, and expected answer are copied.
+                  Each task gets a new ID with no copied submissions or payment
+                  history.
+                </p>
+                <div className="bulk-task-actions">
+                  <Input
+                    id="bulk-template-copies"
+                    aria-label="Number of task template copies"
+                    className="bulk-task-copy-count"
+                    type="number"
+                    min={1}
+                    max={BULK_TASK_MAX_ROWS}
+                    value={copies}
+                    onChange={(event) =>
+                      setCopies(
+                        Math.max(
+                          1,
+                          Math.min(
+                            BULK_TASK_MAX_ROWS,
+                            Number(event.target.value) || 1,
+                          ),
+                        ),
+                      )
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setDuplicateLoaded(false);
+                      setRows([]);
+                    }}
+                  >
+                    Reload template copies
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="bulk-task-upload">
+              <div>
+                <Label htmlFor="bulk-csv-file">Upload a CSV file</Label>
+                <Input
+                  id="bulk-csv-file"
+                  type="file"
+                  accept=".csv,text/csv"
+                  aria-describedby="bulk-csv-help"
+                  onChange={(event) => void loadFile(event.target.files?.[0])}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  download(
+                    "doit-task-template.csv",
+                    `title,description,reward_usdc,correct_answer\n${csvEscape("Example task")},${csvEscape("Describe the task requirements here")},1.00,${csvEscape("example answer")}`,
+                  )
+                }
+              >
+                Download CSV template
+              </Button>
+            </div>
+            <p id="bulk-csv-help" className="bulk-task-hint">
+              CSV size limit: 2 MB. Maximum: {BULK_TASK_MAX_ROWS} rows. Required
+              columns, in order: title, description, reward_usdc, correct_answer.
+            </p>
+
+            {!!rows.length && (
+              <>
+                <div className="bulk-task-summary">
+                  <p aria-live="polite">
+                    {validRows.length} valid for creation · {invalidRows.length}{" "}
+                    excluded with errors
+                  </p>
+                  <label className="bulk-task-duplicate-toggle">
+                    <input
+                      type="checkbox"
+                      checked={allowDuplicates}
+                      onChange={(event) =>
+                        setAllowDuplicates(event.target.checked)
+                      }
+                    />
+                    Allow exact duplicate rows (useful for template copies)
+                  </label>
+                  {invalidRows.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="link"
+                      onClick={downloadInvalid}
+                    >
+                      Download invalid-row report
+                    </Button>
+                  )}
+                </div>
+
+                <div className="bulk-task-table-wrap">
+                  <table className="bulk-task-table">
+                    <caption className="sr-only">
+                      Review and edit imported tasks and their validation errors
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Row</th>
+                        <th scope="col">Title</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Reward USDC</th>
+                        <th scope="col">Expected answer</th>
+                        <th scope="col">Validation</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row, index) => {
+                        const onlyDuplicate =
+                          allowDuplicates &&
+                          row.errors.length > 0 &&
+                          row.errors.every((message) =>
+                            message.startsWith("Duplicate of CSV row"),
+                          );
+                        const valid = row.errors.length === 0 || onlyDuplicate;
+                        const validationId = `bulk-row-${row.rowNumber}-validation`;
+
+                        return (
+                          <tr key={row.rowNumber}>
+                            <th scope="row">{row.rowNumber}</th>
+                            {(
+                              [
+                                "title",
+                                "description",
+                                "reward_usdc",
+                                "correct_answer",
+                              ] as const
+                            ).map((key) => (
+                              <td key={key}>
+                                <Input
+                                  aria-label={`Row ${row.rowNumber} ${key.replace("_", " ")}`}
+                                  aria-describedby={
+                                    valid ? undefined : validationId
+                                  }
+                                  className="bulk-task-row-input"
+                                  value={row.task[key]}
+                                  onChange={(event) =>
+                                    edit(index, key, event.target.value)
+                                  }
+                                />
+                              </td>
+                            ))}
+                            <td
+                              id={validationId}
+                              className={
+                                valid ? "bulk-task-valid" : "bulk-task-invalid"
+                              }
+                              aria-live={valid ? undefined : "polite"}
+                            >
+                              {valid
+                                ? onlyDuplicate
+                                  ? "Duplicate included by choice"
+                                  : "Valid"
+                                : row.errors.join("; ")}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <Button
+                  type="button"
+                  className="bulk-task-submit"
+                  disabled={busy || !validRows.length}
+                  onClick={() => void submit()}
+                >
+                  {busy
+                    ? "Creating batch…"
+                    : `Create ${validRows.length} V1 task(s)`}
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+
+        {error && (
+          <p role="alert" className="bulk-task-feedback bulk-task-error">
+            {error}
+          </p>
+        )}
+        {message && (
+          <p role="status" className="bulk-task-feedback bulk-task-success">
+            {message}
+          </p>
+        )}
+      </section>
+    </main>
+  );
 }
 
-export default function BulkTaskPage() { return <Suspense fallback={<main className="mx-auto max-w-6xl px-5 py-8"><BrandLink compact /><p className="mt-6">Loading task creator…</p></main>}><BulkCreator /></Suspense>; }
+export default function BulkTaskPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="doit-shell bulk-task-shell">
+          <header className="doit-nav task-detail-nav bulk-task-nav">
+            <BrandLink compact />
+            <Link href="/dashboard" className="text-action">
+              Dashboard
+            </Link>
+          </header>
+          <section className="task-detail-state">
+            <div className="eyebrow">CREATOR TOOLS / LOADING</div>
+            <h1>
+              Loading<span>.</span>
+            </h1>
+            <p>Loading the bulk task creator.</p>
+          </section>
+        </main>
+      }
+    >
+      <BulkCreator />
+    </Suspense>
+  );
+}

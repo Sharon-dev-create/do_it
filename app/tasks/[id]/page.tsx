@@ -58,6 +58,8 @@ function TaskDetailContent() {
 
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [answer, setAnswer] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<SubmitResult | null>(null);
@@ -145,6 +147,9 @@ function TaskDetailContent() {
     if (!id) return;
 
     async function loadTask() {
+      setLoading(true);
+      setTask(null);
+      setLoadError(false);
       setPendingClaim(null);
       setResult(null);
       try {
@@ -152,7 +157,11 @@ function TaskDetailContent() {
         const response = await fetch(`/api/tasks/${id}${suffix}`);
 
         if (!response.ok) {
-          throw new Error("Task not found");
+          if (response.status !== 404) {
+            throw new Error("Unable to load this task.");
+          }
+          setTask(null);
+          return;
         }
 
         const data = await response.json();
@@ -170,13 +179,14 @@ function TaskDetailContent() {
         }
       } catch (error) {
         console.error("Failed to load task:", error);
+        setLoadError(true);
       } finally {
         setLoading(false);
       }
     }
 
     loadTask();
-  }, [id, address]);
+  }, [id, address, loadAttempt]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -303,11 +313,24 @@ function TaskDetailContent() {
       <main className="doit-shell">
         <TaskDetailHeader />
         <section className="task-detail-state">
-          <div className="eyebrow">TASK / 404</div>
+          <div className="eyebrow">{loadError ? "TASK / ERROR" : "TASK / 404"}</div>
           <h1>
-            Not found<span>.</span>
+            {loadError ? "Unable to load" : "Not found"}<span>.</span>
           </h1>
-          <p>This task does not exist or is no longer available.</p>
+          <p>
+            {loadError
+              ? "We could not fetch this task. Check your connection and try again."
+              : "This task does not exist or is no longer available."}
+          </p>
+          {loadError && (
+            <button
+              className="task-submit-button"
+              type="button"
+              onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+            >
+              Retry
+            </button>
+          )}
           <Link className="text-action" href="/tasks">
             <ArrowLeft size={14} />
             Back to marketplace
