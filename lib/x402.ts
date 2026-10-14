@@ -21,14 +21,18 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { assertGatewayAvailable, SERVER_ARC_NETWORK_CONFIG } from "@/lib/arc-network-server";
 import { assertPaymentNetwork } from "@/lib/arc-network";
+import {
+  getGatewayChainConfig,
+  getGatewayFacilitatorUrl,
+  getGatewaySellerAddress,
+  getSupportedGatewayExtra,
+  gatewayRequirementsMatch,
+} from "@/lib/gateway-network";
+import { isAddress, parseUnits } from "viem";
 
-const ARC_TESTNET_NETWORK = "eip155:5042002";
-const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000";
-const ARC_TESTNET_GATEWAY_WALLET = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9";
-
-export const sellerAddress = process.env.SELLER_ADDRESS as `0x${string}`;
-
-const facilitator = new BatchFacilitatorClient();
+const facilitator = new BatchFacilitatorClient({
+  url: getGatewayFacilitatorUrl(SERVER_ARC_NETWORK_CONFIG.name),
+});
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -43,22 +47,21 @@ interface PaymentPayload {
   extensions?: Record<string, unknown>;
 }
 
-function buildPaymentRequirements(price: string) {
-  // Parse dollar amount to USDC atomic units (6 decimals)
-  const amount = Math.round(parseFloat(price.replace("$", "")) * 1_000_000);
-
+function buildPaymentRequirements(
+  price: string,
+  extra: Record<string, unknown>,
+) {
+  const amount = parseUnits(price.replace(/^\$/, ""), 6);
+  if (amount <= 0n) throw new Error("x402 payment price must be greater than zero.");
+  const chain = getGatewayChainConfig(SERVER_ARC_NETWORK_CONFIG.name);
   return {
     scheme: "exact" as const,
-    network: ARC_TESTNET_NETWORK,
-    asset: ARC_TESTNET_USDC,
+    network: `eip155:${chain.chain.id}`,
+    asset: chain.usdc,
     amount: amount.toString(),
-    payTo: sellerAddress,
+    payTo: getGatewaySellerAddress(SERVER_ARC_NETWORK_CONFIG.name),
     maxTimeoutSeconds: 691200,
-    extra: {
-      name: "GatewayWalletBatched",
-      version: "1",
-      verifyingContract: ARC_TESTNET_GATEWAY_WALLET,
-    },
+    extra,
   };
 }
 
@@ -73,28 +76,20 @@ export function withGateway(
   price: string,
   endpoint: string,
 ) {
-  const requirements = buildPaymentRequirements(price);
-
   return async (req: NextRequest) => {
+    let requirements: ReturnType<typeof buildPaymentRequirements>;
     try {
       assertGatewayAvailable();
-    } catch {
-      return NextResponse.json(
-        { error: "Circle Gateway Nanopayments are unavailable on Arc Mainnet with the installed SDK." },
-        { status: 503 },
-      );
-    }
-    if (SERVER_ARC_NETWORK_CONFIG.chainId !== 5042002) {
-      return NextResponse.json(
-        { error: "Configured x402 payment requirements do not match Arc Testnet." },
-        { status: 503 },
-      );
-    }
-    try {
+      const chain = getGatewayChainConfig(SERVER_ARC_NETWORK_CONFIG.name);
+      const supported = await facilitator.getSupported();
+      const extra = getSupportedGatewayExtra(supported.kinds, chain);
+      requirements = buildPaymentRequirements(price, extra);
       assertPaymentNetwork(SERVER_ARC_NETWORK_CONFIG.name, requirements.network);
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("[x402] Gateway configuration/support check failed:", message);
       return NextResponse.json(
-        { error: "Configured x402 payment network does not match the server Arc network." },
+        { error: "Circle Gateway does not currently support the configured Arc payment path." },
         { status: 503 },
       );
     }
@@ -131,23 +126,19 @@ export function withGateway(
         Buffer.from(paymentSignature, "base64").toString("utf-8"),
       );
 
-      const acceptedRequirements =
-        paymentPayload.accepted &&
-        typeof paymentPayload.accepted === "object"
-          ? ({
-              ...requirements,
-              ...paymentPayload.accepted,
-              extra: {
-                ...requirements.extra,
-                ...((paymentPayload.accepted as Record<string, unknown>)
-                  .extra as Record<string, unknown> | undefined),
-              },
-            } as typeof requirements)
-          : requirements;
+      if (
+        paymentPayload.x402Version !== 2 ||
+        !gatewayRequirementsMatch(paymentPayload.accepted, requirements)
+      ) {
+        return NextResponse.json(
+          { error: "Payment requirements do not match the server-authorized Arc payment." },
+          { status: 402 },
+        );
+      }
 
       const verifyResult = await facilitator.verify(
         paymentPayload,
-        acceptedRequirements,
+        requirements,
       );
 
       if (!verifyResult.isValid) {
@@ -162,10 +153,15 @@ export function withGateway(
 
       const settleResult = await facilitator.settle(
         paymentPayload,
-        acceptedRequirements,
+        requirements,
       );
 
-      if (!settleResult.success) {
+      if (
+        !settleResult.success ||
+        settleResult.network !== requirements.network ||
+        typeof settleResult.transaction !== "string" ||
+        !settleResult.transaction
+      ) {
         console.error(
           `[x402] Settlement failed for ${endpoint}: ${settleResult.errorReason}`,
         );
@@ -183,6 +179,12 @@ export function withGateway(
         Number(requirements.amount) / 1e6
       ).toString();
       const payer = settleResult.payer ?? verifyResult.payer ?? "unknown";
+      if (!isAddress(payer)) {
+        return NextResponse.json(
+          { error: "Circle Gateway returned an invalid payment payer address." },
+          { status: 502 },
+        );
+      }
 
       const { error } = await supabase.from("payment_events").insert({
         endpoint,
