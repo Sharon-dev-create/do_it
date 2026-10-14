@@ -7,6 +7,7 @@ import { BrandLink } from "@/components/brand-link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { decodeEventLog, parseUnits } from "viem";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
@@ -254,9 +255,12 @@ export default function CreateTaskPage() {
       <div className="mx-auto max-w-5xl px-6 py-10">
         <header className="mb-10 flex items-center justify-between gap-4">
           <BrandLink />
-          <Link href="/dashboard" className="rounded-full border border-input px-4 py-2 text-sm text-foreground hover:border-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            Back to dashboard
-          </Link>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Link href="/dashboard" className="rounded-full border border-input px-4 py-2 text-sm text-foreground hover:border-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              Back to dashboard
+            </Link>
+          </div>
         </header>
 
         <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">

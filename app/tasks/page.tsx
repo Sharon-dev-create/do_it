@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUpRight, Search } from "lucide-react";
 import { BrandLink } from "@/components/brand-link";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { WalletNetworkStatus } from "@/components/wallet-network-status";
 
 type Mission = {
@@ -79,7 +80,7 @@ export default function TaskMarketplace() {
           <Link href="/payments">Payments</Link>
           <Link href="/#agents">Agents</Link>
         </nav>
-        <div className="nav-right"><WalletNetworkStatus /><Link className="wallet-link" href="/dashboard">Open dashboard <ArrowUpRight size={14}/></Link></div>
+        <div className="nav-right"><ThemeToggle /><WalletNetworkStatus /><Link className="wallet-link" href="/dashboard">Open dashboard <ArrowUpRight size={14}/></Link></div>
       </header>
 
       <section className="market-heading">

@@ -11,6 +11,7 @@ import { isAddress } from "viem";
 import { getWorkerSessionChallengeMessage } from "@/lib/worker-session-auth";
 import { getTaskSubmissionNotice, isTaskRewardConfirmed, postTaskAnswer } from "@/lib/task-submission-client";
 import { BrandLink } from "@/components/brand-link";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type Task = {
   id: string;
@@ -42,7 +43,10 @@ function TaskDetailHeader() {
   return (
     <header className="doit-nav task-detail-nav">
       <BrandLink />
-      <ConnectButton />
+      <div className="task-detail-nav-actions">
+        <ThemeToggle />
+        <ConnectButton />
+      </div>
     </header>
   );
 }

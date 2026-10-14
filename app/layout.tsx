@@ -17,6 +17,7 @@
  */
 
 import type { Metadata } from "next";
+import Script from "next/script";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
 import { Providers } from "@/app/providers";
@@ -54,7 +55,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <Script
+        id="doit-theme-init"
+        strategy="beforeInteractive"
+        dangerouslySetInnerHTML={{
+          __html: `(() => {
+            let preference = "system";
+            try {
+              const saved = localStorage.getItem("doit-theme");
+              if (saved === "light" || saved === "dark" || saved === "system") preference = saved;
+            } catch {}
+            const dark = preference === "dark" || (preference === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+            document.documentElement.dataset.themePreference = preference;
+            document.documentElement.dataset.theme = dark ? "dark" : "light";
+          })();`,
+        }}
+      />
       <body className="antialiased">
         <Providers>{children}</Providers>
         <Toaster richColors position="bottom-right" />

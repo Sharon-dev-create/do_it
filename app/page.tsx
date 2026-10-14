@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { usePaymentEvents } from "@/hooks/use-transactions";
 import { BrandLink } from "@/components/brand-link";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { WalletNetworkStatus } from "@/components/wallet-network-status";
 
 type Task = {
@@ -82,7 +83,7 @@ export default function Home() {
         <nav aria-label="Main navigation">
           <a href="#missions">Missions</a><a href="#network">Navigation</a><Link href="/payments">Payments</Link><a href="#agents">Agents</a>
         </nav>
-        <div className="nav-right"><WalletNetworkStatus /><Link className="wallet-link" href="/dashboard">Open dashboard <ArrowUpRight size={14}/></Link></div>
+        <div className="nav-right"><ThemeToggle /><WalletNetworkStatus /><Link className="wallet-link" href="/dashboard">Open dashboard <ArrowUpRight size={14}/></Link></div>
       </header>
 
       <section className="hero">

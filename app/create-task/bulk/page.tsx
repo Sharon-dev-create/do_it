@@ -10,6 +10,7 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { getWorkerSessionChallengeMessage } from "@/lib/worker-session-auth";
 import { BULK_TASK_MAX_FILE_BYTES, BULK_TASK_MAX_ROWS, BulkTaskRow, csvEscape, isValidRewardAmount, parseBulkTaskCsv, ParsedBulkRow } from "@/lib/bulk-task-csv";
 
@@ -124,6 +125,7 @@ function BulkCreator() {
       <header className="doit-nav task-detail-nav bulk-task-nav">
         <BrandLink compact />
         <div className="bulk-task-nav-actions">
+          <ThemeToggle />
           <Link href="/dashboard" className="text-action">Dashboard</Link>
           <ConnectButton />
         </div>
@@ -364,9 +366,10 @@ export default function BulkTaskPage() {
         <main className="doit-shell bulk-task-shell">
           <header className="doit-nav task-detail-nav bulk-task-nav">
             <BrandLink compact />
-            <Link href="/dashboard" className="text-action">
-              Dashboard
-            </Link>
+            <div className="bulk-task-nav-actions">
+              <ThemeToggle />
+              <Link href="/dashboard" className="text-action">Dashboard</Link>
+            </div>
           </header>
           <section className="task-detail-state">
             <div className="eyebrow">CREATOR TOOLS / LOADING</div>
