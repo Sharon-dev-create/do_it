@@ -10,7 +10,9 @@ globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
         ? input.toString()
         : input.url;
 
-  const arcRpcUrl = process.env.ARC_RPC_URL;
+  const arcRpcUrl = process.env.ARC_NETWORK === "testnet"
+    ? process.env.ARC_TESTNET_RPC_URL
+    : undefined;
 
   if (arcRpcUrl && new URL(url).hostname === new URL(arcRpcUrl).hostname) {
     return ipv4Fetch(input as string | URL, init);

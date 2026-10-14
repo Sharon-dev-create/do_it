@@ -18,7 +18,7 @@ The app is intended for task creators, workers, and developers exploring small-v
 
 ### Task marketplace
 
-1. **Create a task.** The single-task form creates a V2 task on Arc Testnet. The creator connects a wallet, creates the escrow task, approves USDC, funds the task, and then submits the transaction details so the server can verify and save marketplace metadata.
+1. **Create a task.** The single-task form creates a V2 task on the explicitly selected Arc network when its escrow deployment is configured and verified. The creator connects a wallet, creates the escrow task, approves USDC, funds the task, and then submits the transaction details so the server can verify and save marketplace metadata.
 2. **Create tasks in bulk.** CSV bulk creation creates V1 Gateway tasks. It does not deposit or reserve USDC at task creation. A Gateway-funded seller wallet is needed later if a V1 payout is attempted.
 3. **Authorize a worker wallet.** A worker signs a short-lived wallet-session challenge. The server sets a session cookie and derives the worker identity from that signed session when handling submissions.
 4. **Submit an answer.** The API compares the answer with the stored expected answer. Incorrect answers are recorded without payment. Correct-answer flows reserve the task and create submission/payment records.
@@ -106,9 +106,11 @@ The project uses npm lockfiles. The root package has scripts for `dev`, `build`,
 
 ## Network and Payments
 
-The current application configuration targets **Arc Testnet**, chain ID **5042002**. The configured Arc Testnet USDC address is `0x3600000000000000000000000000000000000000`. The V2 escrow address in the app ABI is `0x024539183A57428C63B2F2628b881105213332E4`; the verifier address configured by the deployment script is `0x41aa5227695B8c6c5FfAD3bF3A9aAF0626921d0E`.
+Network selection is explicit and must match in the server and browser environment. Arc Testnet uses chain ID `5042002`; Arc Mainnet uses chain ID `5042`, RPC `https://rpc.mainnet.arc.io`, and explorer `https://explorer.arc.io`. The Arc USDC ERC-20 interface is `0x3600000000000000000000000000000000000000` with 6 decimals on both networks. Arc's native USDC gas balance uses 18-decimal units; the app's task amounts use the 6-decimal ERC-20 interface.
 
-These addresses and flows are testnet configuration. Testnet assets are not a promise of real-world value. This README does not describe a mainnet deployment.
+The existing escrow address `0x024539183A57428C63B2F2628b881105213332E4` and verifier `0x41aa5227695B8c6c5FfAD3bF3A9aAF0626921d0E` are testnet-only. No Arc Mainnet escrow deployment is included. Mainnet V2 routes require a separately reviewed deployment, matching runtime bytecode hash, and verifier configuration before the application will use that address.
+
+The installed `@circle-fin/x402-batching` SDK supports `arcTestnet` but does not define Arc Mainnet. Gateway balance/withdrawal, V1 Gateway payouts, and x402 Gateway settlement therefore remain disabled on Mainnet. The bulk-task endpoint rejects Mainnet requests rather than creating tasks whose payout path cannot execute.
 
 ### V1 Gateway tasks
 
@@ -133,9 +135,9 @@ The `/api/premium/quote`, `/dataset`, `/compute`, and `/agent-task` routes use a
 - An Arc Testnet-compatible EVM wallet for browser flows.
 - A WalletConnect project ID for the RainbowKit configuration.
 - Supabase local services or a Supabase project configured for development.
-- Arc Testnet RPC access. V2 server reads default to the public Arc Testnet RPC; V1 payout code reads `ARC_RPC_URL`.
+- An Arc Testnet RPC for development, or a verified Arc Mainnet RPC after the separately audited escrow deployment.
 - For V1 Gateway payouts, a configured seller wallet and testnet Gateway funds.
-- For V2 reward credits, the private key for the configured verifier address and a test-worker address in the app allowlist.
+- For V2 reward credits, the private key for the configured network's verifier address and a worker address in the corresponding network allowlist.
 - For the optional agent, a funded testnet buyer wallet. An OpenAI API key is optional; the script documents a mock/scripted fallback.
 
 ## Getting Started
@@ -229,7 +231,7 @@ Set both `ARC_NETWORK` and `NEXT_PUBLIC_ARC_NETWORK` to the same explicit value 
 
 ### Create a single V2 task
 
-1. Open **Create task** and connect an Arc Testnet wallet.
+1. Open **Create task** and connect a wallet on the explicitly configured Arc network.
 2. Enter a title, description, expected answer, and USDC reward.
 3. Confirm the contract interactions in your wallet: create the task, approve USDC, and fund the escrow.
 4. The app verifies the create/fund receipts and saves task metadata. If metadata saving fails after funding, retain the original transaction hashes and use the UI's recovery path; do not create or fund a duplicate task.
@@ -242,11 +244,11 @@ Set both `ARC_NETWORK` and `NEXT_PUBLIC_ARC_NETWORK` to the same explicit value 
 
 ### Submit work and receive rewards
 
-1. Open a task and connect the worker wallet.
+1. Open a task and connect the worker wallet on the configured Arc network.
 2. Authorize the wallet session by signing the displayed challenge. The signature creates an application session; it is not a reward transaction.
 3. Submit an answer. The app records incorrect answers without payment.
 4. For V1, a correct answer triggers the existing Gateway payout path. Check payment status if a transaction needs reconciliation.
-5. For V2, the app accepts only workers listed in `DOIT_V2_TEST_WORKERS`. Confirm the `claimTask` transaction when prompted. After the server verifier credits the escrow balance, open the earnings section to review the available balance and withdrawal history, then submit a separate withdrawal transaction when eligible.
+5. For V2, the app accepts only workers listed in `DOIT_V2_TEST_WORKERS` (Testnet) or `DOIT_MAINNET_WORKERS` (Mainnet). Confirm the `claimTask` transaction when prompted. After the server verifier credits the escrow balance, open the earnings section to review the available balance and withdrawal history, then submit a separate withdrawal transaction when eligible.
 
 The connected wallet confirms on-chain actions. A task's recorded answer and its payment settlement are separate application and transaction states; a submitted payment is not the same as a confirmed payment.
 
@@ -290,7 +292,20 @@ Contracts are under `contracts/src`:
 
 The V2 contract checks that the USDC token uses six decimals, tracks task and worker liabilities, and limits withdrawals to the caller's accumulated balance. The verifier address is fixed at deployment; the server checks that the configured signing key derives to that address. These code facts are not a security audit or a guarantee of uninterrupted RPC, token, or network behavior.
 
-The V2 ABI and app address are in `lib/contracts/doItEscrow.ts`; deployment scripts are in `contracts/script`. The V2 deployment script explicitly requires Arc Testnet chain ID 5042002. No mainnet deployment procedure is documented here.
+The V2 ABI and network-selected escrow address are in `lib/contracts/doItEscrow.ts`; the checked-in deployment script remains explicitly testnet-only. Do not change it to broadcast to Mainnet without a separate contract audit, deployment procedure, key custody plan, and explicit release approval.
+
+### Mainnet readiness and launch blockers
+
+- There is no reviewed or verified Arc Mainnet escrow deployment in this repository. Deploy and independently verify a new contract; never reuse the testnet address.
+- Provide the deployment block, verifier address, and exact runtime bytecode hash from the reviewed deployment. The application checks the configured chain ID, contract code hash, escrow USDC address, verifier address, and USDC ERC-20 decimals on both the browser and server before Mainnet escrow actions.
+- Use a new, mainnet-only verifier key in `DOIT_MAINNET_VERIFIER_PRIVATE_KEY`. Do not reuse `SELLER_PRIVATE_KEY`, `DOIT_VERIFIER_PRIVATE_KEY`, `BUYER_PRIVATE_KEY`, or any testnet wallet/key.
+- Circle Gateway does not support Arc Mainnet in the currently installed SDK; Gateway- and x402-backed flows are intentionally unavailable on Mainnet until the SDK and official Circle support Arc Mainnet.
+- Configure `ARC_NETWORK=mainnet` and `NEXT_PUBLIC_ARC_NETWORK=mainnet` only in the production environment. Keep development and preview environments explicitly set to `testnet`.
+- Use a distinct production Supabase project and apply only the reviewed forward migrations there. No schema migration is required just to select Mainnet when the production project is isolated; task and payment tables otherwise lack a general network discriminator.
+- Configure Vercel environment variables by environment (Production versus Preview/Development); no tracked Vercel environment file is provided. Public chain addresses, RPC URLs, and WalletConnect ID may use `NEXT_PUBLIC_*`; all signing keys, Supabase service-role keys, and server-only selectors must remain server-side.
+- Complete read-only chain checks, contract verification, allowlist review, RPC validation, and testnet regression testing before inviting users. Never use build success as evidence of real-money payment testing.
+
+Safe launch order: (1) keep production unset or on the existing maintenance page; (2) audit and deploy a fresh escrow with a new verifier; (3) verify its source, constructor values, runtime code hash, USDC token and deployment block; (4) configure separate production Supabase and Vercel variables; (5) verify server/client selectors and read-only chain checks; (6) run the build and test suite against the exact production configuration without sending a transaction; (7) conduct a manually approved low-value operational test only after the business owner explicitly authorizes real funds; (8) monitor reconciliation, contract liabilities, verifier key access, and withdrawal history.
 
 Run contract tests from the `contracts` directory:
 

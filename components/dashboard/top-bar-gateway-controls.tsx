@@ -60,6 +60,7 @@ export function TopBarGatewayControls() {
   }, []);
 
   useEffect(() => {
+    if (ARC_NETWORK_CONFIG.name === "mainnet") return;
     const supabase = createClient();
     const channel = supabase
       .channel("balance-refresh")

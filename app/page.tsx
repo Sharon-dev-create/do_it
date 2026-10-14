@@ -118,7 +118,7 @@ export default function Home() {
       </section>
 
       <section className="missions-section" id="missions">
-        <div className="section-heading"><div><span className="eyebrow">OPEN WORK / ARC TESTNET</span><h2>Missions</h2></div><a href="#missions" className="text-action">View all <span>→</span></a></div>
+        <div className="section-heading"><div><span className="eyebrow">OPEN WORK / {ARC_NETWORK_CONFIG.label.toUpperCase()}</span><h2>Missions</h2></div><a href="#missions" className="text-action">View all <span>→</span></a></div>
         {latestTasks.length ? <div className="mission-table"><div className="table-head"><span>MISSION</span><span>TYPE</span><span>REWARD</span><span>STATUS</span></div>{latestTasks.map((task,index)=><Link className="mission-row" href={`/tasks/${task.id}`} key={task.id}><span className="mission-id mono">#{task.id.slice(0,8).toUpperCase()}</span><span className="mission-title">{task.title}</span><span className="reward mono">{Number(task.reward_usdc).toFixed(3)} USDC</span><span className="status-open"><i/> Open <span className="row-arrow">↗</span></span></Link>)}</div> : <div className="empty-missions"><span className="mono">{tasksLoading ? "SYNCING TASK FEED…" : "NO OPEN MISSIONS"}</span><p>{tasksLoading ? "Connecting to the task network." : "New tasks will appear here when they are posted."}</p><Link href="/create-task">Launch a mission <span>→</span></Link></div>}
       </section>
 
