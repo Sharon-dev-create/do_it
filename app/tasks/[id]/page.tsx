@@ -404,9 +404,9 @@ function TaskDetailContent() {
                 </div>
               )}
 
-              {result?.correct && (
+              {result?.correct && (result.credited || task.contract_version === "v1") && (
                 <div className="task-result task-result-success">
-                  <span className="eyebrow">{result.credited ? "EARNINGS CREDITED" : "MISSION COMPLETE"}</span>
+                  <span className="eyebrow">{task.contract_version === "v2" ? "EARNINGS CREDITED" : "PAYMENT CONFIRMED"}</span>
 
                   <h3>{result.message}</h3>
 
@@ -424,14 +424,31 @@ function TaskDetailContent() {
               )}
 
               {pendingClaim && (
+                <>
+                <div className="task-result task-result-pending" role="status">
+                  <span className="eyebrow">ANSWER ACCEPTED</span>
+                  <p>Confirm the Arc Testnet claim transaction to continue. Earnings are not credited yet.</p>
+                </div>
                 <button className="task-submit-button" type="button" disabled={submitting || chainId !== 5042002 || !isWorkerAuthorized} onClick={() => finalizeClaim(pendingClaim.submissionId)}>
                   {submitting ? "WAITING FOR ARC..." : "CONTINUE: CLAIM ON ARC"}
                 </button>
+                </>
               )}
               {result?.requiresReconciliation && result.paymentId && (
+                <>
+                <div className="task-result task-result-pending" role="status">
+                  <span className="eyebrow">REWARD CREDIT PENDING</span>
+                  <p>The claim was accepted, but the reward is not confirmed in your earnings yet. Check its on-chain status before taking further action.</p>
+                  {result.txHash && (
+                    <a href={`https://testnet.arcscan.app/tx/${result.txHash}`} target="_blank" rel="noreferrer">
+                      View transaction <ArrowUpRight size={13} />
+                    </a>
+                  )}
+                </div>
                 <button className="task-submit-button" type="button" disabled={submitting} onClick={reconcileCredit}>
                   {submitting ? "CHECKING..." : "CHECK REWARD CREDIT STATUS"}
                 </button>
+                </>
               )}
 
               <p className="task-field">

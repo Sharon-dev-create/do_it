@@ -34,6 +34,7 @@ export type PaymentEvent = {
 export function usePaymentEvents() {
   const [events, setEvents] = useState<PaymentEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
   useEffect(() => {
@@ -47,7 +48,9 @@ export function usePaymentEvents() {
 
       if (error) {
         console.error("Failed to fetch payment events:", error.message);
+        setError("Payment history is unavailable. Try refreshing the page.");
       } else {
+        setError(null);
         // Merge with any realtime events that arrived before the fetch completed
         setEvents((prev) => {
           if (prev.length === 0) return data as PaymentEvent[];
@@ -113,5 +116,5 @@ export function usePaymentEvents() {
     };
   }, []);
 
-  return { events, loading };
+  return { events, loading, error };
 }

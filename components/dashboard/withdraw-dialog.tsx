@@ -41,7 +41,7 @@ import { BanknoteArrowDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 const CHAIN_EXPLORERS: Record<string, string> = {
-  arcTestnet: "https://testnet.arcscan.io/tx/",
+  arcTestnet: "https://testnet.arcscan.app/tx/",
   baseSepolia: "https://sepolia.basescan.org/tx/",
   sepolia: "https://sepolia.etherscan.io/tx/",
   arbitrumSepolia: "https://sepolia.arbiscan.io/tx/",
@@ -124,7 +124,11 @@ export function WithdrawDialog({ maxAvailable, onWithdraw }: WithdrawDialogProps
         onWithdraw();
 
         toast.success(`Withdrawn ${data.amount} USDC`, {
-          description: `tx: ${data.txHash}`,
+          description: (
+            <a href={explorerUrl} target="_blank" rel="noreferrer" className="underline">
+              View confirmed transaction
+            </a>
+          ),
           duration: 10000,
         });
       }

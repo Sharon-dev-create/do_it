@@ -33,6 +33,7 @@ export type Withdrawal = {
 export function useWithdrawals() {
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
   useEffect(() => {
@@ -46,7 +47,9 @@ export function useWithdrawals() {
 
       if (error) {
         console.error("Failed to fetch withdrawals:", error.message);
+        setError("Withdrawal history is unavailable. Try refreshing the page.");
       } else {
+        setError(null);
         setWithdrawals((prev) => {
           if (prev.length === 0) return data as Withdrawal[];
           const fetched = data as Withdrawal[];
@@ -108,5 +111,5 @@ export function useWithdrawals() {
     };
   }, []);
 
-  return { withdrawals, loading };
+  return { withdrawals, loading, error };
 }

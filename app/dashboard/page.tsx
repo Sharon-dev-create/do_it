@@ -143,8 +143,8 @@ function StatusBadge({ status }: { status: string }) {
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
 export default function Dashboard() {
-  const { events, loading: loadingPayments } = usePaymentEvents();
-  const { withdrawals, loading: loadingWithdrawals } = useWithdrawals();
+  const { events, loading: loadingPayments, error: paymentError } = usePaymentEvents();
+  const { withdrawals, loading: loadingWithdrawals, error: withdrawalError } = useWithdrawals();
   const [activeTab, setActiveTab] = useState("payments");
   const [filter, setFilter] = useState("");
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -339,6 +339,12 @@ export default function Dashboard() {
                       Loading payments...
                     </TableCell>
                   </TableRow>
+                ) : paymentError ? (
+                  <TableRow>
+                    <TableCell colSpan={5} role="alert" className="h-24 text-center text-destructive">
+                      {paymentError}
+                    </TableCell>
+                  </TableRow>
                 ) : paginatedPayments.length === 0 ? (
                   <TableRow>
                     <TableCell
@@ -432,6 +438,12 @@ export default function Dashboard() {
                     >
                       <Loader2 size={16} className="animate-spin inline mr-2" />
                       Loading withdrawals...
+                    </TableCell>
+                  </TableRow>
+                ) : withdrawalError ? (
+                  <TableRow>
+                    <TableCell colSpan={6} role="alert" className="h-24 text-center text-destructive">
+                      {withdrawalError}
                     </TableCell>
                   </TableRow>
                 ) : paginatedWithdrawals.length === 0 ? (

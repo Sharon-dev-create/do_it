@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { BrandLink } from "@/components/brand-link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { decodeEventLog, parseUnits } from "viem";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
@@ -247,102 +250,102 @@ export default function CreateTaskPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f4f3f1] text-[#111111]">
+    <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-5xl px-6 py-10">
         <header className="mb-10 flex items-center justify-between gap-4">
           <BrandLink />
-          <Link href="/dashboard" className="rounded-full border border-[#d7d5d3] px-4 py-2 text-sm text-[#111111] hover:border-[#111111]">
+          <Link href="/dashboard" className="rounded-full border border-input px-4 py-2 text-sm text-foreground hover:border-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             Back to dashboard
           </Link>
         </header>
 
         <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <section className="rounded-[28px] border border-[#e0dfdd] bg-white p-6 shadow-[0_18px_50px_rgba(17,17,17,0.04)] sm:p-8">
-            <p className="mb-3 text-xs font-medium uppercase tracking-[0.25em] text-[#6e6b68]">
+          <section className="rounded-[var(--doit-radius-card)] border border-border bg-card p-6 shadow-[var(--doit-shadow-card)] sm:p-8">
+            <p className="mb-3 text-xs font-medium uppercase tracking-[0.25em] text-muted-foreground">
               Mission intake
             </p>
             <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
               Create a new task
             </h1>
-            <p className="mt-3 max-w-xl text-sm text-[#585653]">
+            <p className="mt-3 max-w-xl text-sm text-muted-foreground">
               Define a task, set the reward, and route it to the worker network.
             </p>
             <form onSubmit={handleSubmit} className="mt-8 space-y-6">
-              <div className="rounded-2xl border border-[#e0dfdd] bg-[#faf9f8] p-4">
+              <div className="rounded-2xl border border-border bg-muted p-4">
                 <p className="mb-3 text-sm font-medium">Creator wallet</p>
                 <ConnectButton />
                 {isConnected && address ? (
-                  <p className="mt-3 break-all text-xs text-[#585653]">
+                  <p className="mt-3 break-all text-xs text-muted-foreground">
                     Connected: {address}
                   </p>
                 ) : (
-                  <p className="mt-3 text-xs text-[#585653]">
+                  <p className="mt-3 text-xs text-muted-foreground">
                     Connect your wallet to create and fund a task.
                   </p>
                 )}
               </div>
 
               <div>
-                <label htmlFor="title" className="mb-2 block text-sm font-medium text-[#111111]">
+                <Label htmlFor="title" className="mb-2 block">
                   Task title
-                </label>
-                <input
+                </Label>
+                <Input
                   id="title"
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   placeholder="Give your task a clear title"
-                  className="w-full rounded-xl border border-[#d8d6d4] bg-[#faf9f8] px-4 py-3 text-sm outline-none transition focus:border-[#111111]"
+                  className="h-11 rounded-[var(--doit-radius-control)] bg-background px-4"
                   required
                 />
               </div>
 
               <div>
-                <label htmlFor="description" className="mb-2 block text-sm font-medium text-[#111111]">
+                <Label htmlFor="description" className="mb-2 block">
                   Description
-                </label>
+                </Label>
                 <textarea
                   id="description"
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                   rows={6}
                   placeholder="Describe expected work, deliverables, and verification criteria."
-                  className="w-full rounded-xl border border-[#d8d6d4] bg-[#faf9f8] px-4 py-3 text-sm outline-none transition focus:border-[#111111]"
+                  className="w-full rounded-[var(--doit-radius-control)] border border-input bg-background px-4 py-3 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   required
                 />
               </div>
 
               <div>
-                <label htmlFor="reward" className="mb-2 block text-sm font-medium text-[#111111]">
+                <Label htmlFor="reward" className="mb-2 block">
                   Reward (USDC)
-                </label>
-                <input
+                </Label>
+                <Input
                   id="reward"
                   type="number"
                   min="0"
                   step="0.000001"
                   value={rewardUsdc}
                   onChange={(event) => setRewardUsdc(event.target.value)}
-                  className="w-full rounded-xl border border-[#d8d6d4] bg-[#faf9f8] px-4 py-3 text-sm outline-none transition focus:border-[#111111]"
+                  className="h-11 rounded-[var(--doit-radius-control)] bg-background px-4"
                   required
                 />
               </div>
 
               <div>
-                <label htmlFor="correctAnswer" className="mb-2 block text-sm font-medium text-[#111111]">
+                <Label htmlFor="correctAnswer" className="mb-2 block">
                   Correct answer
-                </label>
-                <input
+                </Label>
+                <Input
                   id="correctAnswer"
                   value={correctAnswer}
                   onChange={(event) => setCorrectAnswer(event.target.value)}
                   placeholder="Expected answer or verification value"
-                  className="w-full rounded-xl border border-[#d8d6d4] bg-[#faf9f8] px-4 py-3 text-sm outline-none transition focus:border-[#111111]"
+                  className="h-11 rounded-[var(--doit-radius-control)] bg-background px-4"
                   required
                 />
               </div>
 
               {error ? (
-                <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                   {error}
                 </p>
               ) : null}
@@ -355,32 +358,32 @@ export default function CreateTaskPage() {
 
               {fundedRecovery && <div role="status" className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><p>The on-chain task is already funded. Do not create or fund another task. Recovery uses the original task ID {fundedRecovery.taskId} and transaction hashes.</p><button type="button" disabled={isSubmitting} onClick={retryMetadataSave} className="rounded-full bg-[#111111] px-4 py-2 text-white disabled:opacity-60">{isSubmitting ? "Reconciling..." : "Retry metadata save"}</button></div>}
 
-              <div className="flex items-center justify-between gap-4 pt-2">
+              <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
                 <Link href="/" className="text-sm text-[#585653] hover:text-[#111111]">
                   Cancel
                 </Link>
-                <button
+                <Button
                   type="submit"
                   disabled={isSubmitting || !isConnected || Boolean(fundedRecovery)}
-                  className="rounded-full bg-[#111111] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#2e2d2b] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="h-11 rounded-full px-5"
                 >
                   {isSubmitting ? "Creating..." : "Create task"}
-                </button>
+                </Button>
               </div>
             </form>
           </section>
 
-          <aside className="rounded-[28px] border border-[#e0dfdd] bg-[#111111] p-6 text-[#f4f3f1] sm:p-8">
-            <p className="text-xs font-medium uppercase tracking-[0.25em] text-[#c9c7c4]">
+          <aside className="rounded-[var(--doit-radius-card)] border border-border bg-primary p-6 text-primary-foreground sm:p-8">
+            <p className="text-xs font-medium uppercase tracking-[0.25em] opacity-70">
               Route summary
             </p>
             <div className="mt-8 space-y-6">
               <div>
-                <p className="text-sm text-[#bdb9b4]">Task intake</p>
+                <p className="text-sm opacity-70">Task intake</p>
                 <p className="mt-2 text-2xl font-semibold">Open mission</p>
               </div>
               <div>
-                <p className="text-sm text-[#bdb9b4]">Verification</p>
+                <p className="text-sm opacity-70">Verification</p>
                 <p className="mt-2 text-2xl font-semibold">AI + worker checks</p>
               </div>
               <div>
