@@ -15,13 +15,19 @@ export function BrandLink({
       aria-label="Do-It home"
     >
       <span className="brand-mark" aria-hidden="true">
-        <Image
-          src="/brand/do-it-mark.png"
-          alt=""
-          width={64}
-          height={64}
-          className="brand-mark-image"
-        />
+        <picture className="brand-mark-picture">
+          <source
+            media="(prefers-color-scheme: dark)"
+            srcSet="/brand/do-it-mark-dark.png"
+          />
+          <Image
+            src="/brand/do-it-mark.png"
+            alt=""
+            width={64}
+            height={64}
+            className="brand-mark-image"
+          />
+        </picture>
       </span>
       <span>Do-It</span>
     </Link>
