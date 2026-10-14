@@ -164,6 +164,7 @@ export function hasArcMainnetMintLog(
   recipient: string,
   amountUsdc: bigint,
 ): boolean {
+  if (!isAddress(recipient) || amountUsdc <= 0n) return false;
   const expectedFromTopic = `0x${"0".repeat(64)}`;
   const expectedToTopic = `0x${recipient.toLowerCase().replace(/^0x/, "").padStart(64, "0")}`;
   const expectedValue = amountUsdc * 10n ** 12n;

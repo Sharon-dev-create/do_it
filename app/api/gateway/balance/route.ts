@@ -16,7 +16,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { NextResponse } from "next/server";
+import { connection, NextResponse } from "next/server";
 import { createPublicClient, http, formatUnits, erc20Abi, parseUnits } from "viem";
 import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 import { assertGatewayAvailable, SERVER_ARC_NETWORK_CONFIG } from "@/lib/arc-network-server";
@@ -44,6 +44,7 @@ async function getWalletUsdcBalance(address: `0x${string}`): Promise<string> {
 }
 
 export async function GET() {
+  await connection();
   try {
     assertGatewayAvailable();
     const sellerAddress = getGatewaySellerAddress(SERVER_ARC_NETWORK_CONFIG.name);
