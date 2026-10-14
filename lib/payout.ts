@@ -1,9 +1,6 @@
 import { randomBytes } from "crypto";
 import "./server-fetch";
-import {
-  CHAIN_CONFIGS,
-  GatewayClient,
-} from "@circle-fin/x402-batching/client";
+import { GatewayClient } from "@circle-fin/x402-batching/client";
 import { assertGatewayNetwork } from "@/lib/arc-network";
 import { assertGatewayAvailable, SERVER_ARC_NETWORK_CONFIG } from "@/lib/arc-network-server";
 import {
@@ -12,6 +9,13 @@ import {
   parseUnits,
   zeroAddress,
 } from "viem";
+import {
+  getGatewayApiUrl,
+  getGatewayChainName,
+  getGatewayChainConfig,
+  getGatewaySellerCredentials,
+  hasArcMainnetMintLog,
+} from "@/lib/gateway-network";
 
 export async function payWorker(
   amount: string,
@@ -28,19 +32,20 @@ export async function payWorker(
 
   console.info("PAYOUT: worker address validated", { workerAddress });
 
-  const privateKey = process.env.SELLER_PRIVATE_KEY;
-
-  if (!privateKey) {
-    throw new Error("SELLER_PRIVATE_KEY not configured");
+  const { privateKey } = getGatewaySellerCredentials(
+    SERVER_ARC_NETWORK_CONFIG.name,
+  );
+  const config = getGatewayChainConfig(SERVER_ARC_NETWORK_CONFIG.name);
+  if (config.chain.id !== SERVER_ARC_NETWORK_CONFIG.chainId) {
+    throw new Error("Circle Gateway chain does not match the selected Arc network.");
   }
 
   const gateway = new GatewayClient({
-    chain: "arcTestnet",
-    privateKey: privateKey as `0x${string}`,
+    chain: getGatewayChainName(SERVER_ARC_NETWORK_CONFIG.name),
+    privateKey,
     rpcUrl: SERVER_ARC_NETWORK_CONFIG.rpcUrl,
   });
 
-  const config = CHAIN_CONFIGS.arcTestnet;
   const rpcUrl = SERVER_ARC_NETWORK_CONFIG.rpcUrl;
   const rpcChainResponse = await fetch(rpcUrl, {
     method: "POST",
@@ -50,7 +55,7 @@ export async function payWorker(
   const rpcChain = await rpcChainResponse.json();
   if (!rpcChainResponse.ok || rpcChain.error ||
       Number.parseInt(rpcChain.result, 16) !== SERVER_ARC_NETWORK_CONFIG.chainId) {
-    throw new Error("Gateway payout RPC does not match the selected Arc Testnet configuration.");
+    throw new Error("Gateway payout RPC does not match the selected Arc network configuration.");
   }
 
   const withdrawAmount = parseUnits(amount, 6);
@@ -63,7 +68,7 @@ export async function payWorker(
 
   console.info("PAYOUT: requesting Gateway balance");
   const balanceResponse = await fetch(
-    "https://gateway-api-testnet.circle.com/v1/balances",
+    getGatewayApiUrl(SERVER_ARC_NETWORK_CONFIG.name, "/balances"),
     {
       method: "POST",
       headers: {
@@ -93,7 +98,12 @@ export async function payWorker(
     );
   }
 
-  const gatewayBalance = balanceData.balances[0];
+  const gatewayBalance = balanceData.balances.find(
+    (balance: { domain: number }) => balance.domain === config.domain,
+  );
+  if (!gatewayBalance) {
+    throw new Error("Circle Gateway returned no balance for the selected Arc domain.");
+  }
 
   const available = parseUnits(gatewayBalance.balance, 6);
   const pendingBatch = parseUnits(
@@ -209,7 +219,7 @@ export async function payWorker(
 
   console.info("PAYOUT: requesting Circle transfer attestation");
   const transferResponse = await fetch(
-    "https://gateway-api-testnet.circle.com/v1/transfer",
+    getGatewayApiUrl(SERVER_ARC_NETWORK_CONFIG.name, "/transfer"),
     {
       method: "POST",
       headers: {
@@ -359,6 +369,16 @@ export async function payWorker(
         txHash: mintTxHash,
       });
 
+      throw error;
+    }
+    if (
+      SERVER_ARC_NETWORK_CONFIG.name === "mainnet" &&
+      !hasArcMainnetMintLog(receipt.logs, workerAddress, withdrawAmount)
+    ) {
+      const error = new Error(
+        `Arc Mainnet Gateway mint receipt did not confirm the expected USDC amount and worker recipient: ${mintTxHash}`,
+      );
+      Object.assign(error, { txHash: mintTxHash });
       throw error;
     }
   } catch (error) {

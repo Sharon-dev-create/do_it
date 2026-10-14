@@ -13,6 +13,16 @@ const GATEWAY_API_URLS: Record<ArcNetworkName, string> = {
   testnet: "https://gateway-api-testnet.circle.com/v1",
   mainnet: "https://gateway-api.circle.com/v1",
 };
+const GATEWAY_CONTRACTS = {
+  testnet: {
+    wallet: "0x0077777d7EBA4688BDeF3E311b846F25870A19B9",
+    minter: "0x0022222ABE238Cc2C7Bb1f21003F0a260052475B",
+  },
+  mainnet: {
+    wallet: "0x77777777Dcc4d5A8B6E418Fd04D8997ef11000eE",
+    minter: "0x2222222d7164433c4C09B0b0D809a9b52C04C205",
+  },
+} as const;
 
 export function getGatewayChainName(network: ArcNetworkName): SupportedChainName {
   return network === "mainnet" ? "arc" : "arcTestnet";
@@ -24,7 +34,11 @@ export function getGatewayChainConfig(network: ArcNetworkName) {
   if (
     config.chain.id !== expectedChainId ||
     config.domain !== 26 ||
-    config.usdc.toLowerCase() !== ARC_USDC_ADDRESS.toLowerCase()
+    config.usdc.toLowerCase() !== ARC_USDC_ADDRESS.toLowerCase() ||
+    config.gatewayWallet.toLowerCase() !==
+      GATEWAY_CONTRACTS[network].wallet.toLowerCase() ||
+    config.gatewayMinter.toLowerCase() !==
+      GATEWAY_CONTRACTS[network].minter.toLowerCase()
   ) {
     throw new Error(
       `Circle Gateway ${network} configuration does not match the verified Arc chain, domain, and USDC token.`,
@@ -104,6 +118,40 @@ export function getSupportedGatewayExtra(
     );
   }
   return extra;
+}
+
+export function gatewayRequirementsMatch(
+  accepted: Record<string, unknown> | undefined,
+  expected: {
+    scheme: string;
+    network: string;
+    asset: string;
+    amount: string;
+    payTo: string;
+    maxTimeoutSeconds: number;
+    extra: Record<string, unknown>;
+  },
+): boolean {
+  const extra = accepted?.extra;
+  if (!accepted || !extra || typeof extra !== "object") return false;
+  const acceptedExtra = extra as Record<string, unknown>;
+  const acceptedPayTo = accepted.payTo;
+  const acceptedAsset = accepted.asset;
+  return (
+    accepted.scheme === expected.scheme &&
+    accepted.network === expected.network &&
+    typeof acceptedAsset === "string" &&
+    acceptedAsset.toLowerCase() === expected.asset.toLowerCase() &&
+    accepted.amount === expected.amount &&
+    typeof acceptedPayTo === "string" &&
+    acceptedPayTo.toLowerCase() === expected.payTo.toLowerCase() &&
+    accepted.maxTimeoutSeconds === expected.maxTimeoutSeconds &&
+    acceptedExtra.name === expected.extra.name &&
+    acceptedExtra.version === expected.extra.version &&
+    typeof acceptedExtra.verifyingContract === "string" &&
+    acceptedExtra.verifyingContract.toLowerCase() ===
+      String(expected.extra.verifyingContract).toLowerCase()
+  );
 }
 
 const ARC_SYSTEM_EMITTER =
