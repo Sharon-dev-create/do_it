@@ -5,6 +5,15 @@ export type TaskSubmissionPayload = {
   claim_tx_hash?: `0x${string}`;
 };
 
+export function isTaskRewardConfirmed(
+  contractVersion: "v1" | "v2",
+  result: { correct?: boolean; credited?: boolean } | null,
+) {
+  return Boolean(
+    result?.correct && (contractVersion === "v1" || result.credited),
+  );
+}
+
 export function getTaskSubmissionNotice(result: { correct?: boolean; error?: string; message?: string } | null) {
   if (!result) return null;
   if (result.error) return result.error;

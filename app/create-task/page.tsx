@@ -351,15 +351,15 @@ export default function CreateTaskPage() {
               ) : null}
 
               {progress ? (
-                <p role="status" className="text-sm text-[#585653]">
+                <p role="status" className="text-sm text-muted-foreground">
                   {progress}
                 </p>
               ) : null}
 
-              {fundedRecovery && <div role="status" className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><p>The on-chain task is already funded. Do not create or fund another task. Recovery uses the original task ID {fundedRecovery.taskId} and transaction hashes.</p><button type="button" disabled={isSubmitting} onClick={retryMetadataSave} className="rounded-full bg-[#111111] px-4 py-2 text-white disabled:opacity-60">{isSubmitting ? "Reconciling..." : "Retry metadata save"}</button></div>}
+              {fundedRecovery && <div role="alert" className="space-y-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-foreground"><p>The on-chain task is already funded. Do not create or fund another task. Recovery uses the original task ID {fundedRecovery.taskId} and transaction hashes.</p><Button type="button" disabled={isSubmitting} onClick={retryMetadataSave} variant="outline">{isSubmitting ? "Reconciling..." : "Retry metadata save"}</Button></div>}
 
               <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
-                <Link href="/" className="text-sm text-[#585653] hover:text-[#111111]">
+                <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
                   Cancel
                 </Link>
                 <Button
@@ -387,14 +387,14 @@ export default function CreateTaskPage() {
                 <p className="mt-2 text-2xl font-semibold">AI + worker checks</p>
               </div>
               <div>
-                <p className="text-sm text-[#bdb9b4]">Settlement</p>
+                <p className="text-sm opacity-70">Settlement</p>
                 <p className="mt-2 text-2xl font-semibold">USDC on Arc</p>
               </div>
             </div>
 
             <div className="mt-10 rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-[#c9c7c4]">Mission brief</p>
-              <p className="mt-3 text-sm leading-6 text-[#f4f3f1]">
+              <p className="text-xs uppercase tracking-[0.2em] opacity-70">Mission brief</p>
+              <p className="mt-3 text-sm leading-6">
                 Clear tasks yield faster routing, stronger verification, and cleaner payout flows across the worker network.
               </p>
             </div>

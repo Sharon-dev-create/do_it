@@ -32,6 +32,7 @@ import { BrandLink } from "@/components/brand-link";
 export function TopBarGatewayControls() {
   const [balances, setBalances] = useState<GatewayBalances | null>(null);
   const [loading, setLoading] = useState(false);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const balancesRef = useRef<GatewayBalances | null>(null);
 
@@ -39,19 +40,19 @@ export function TopBarGatewayControls() {
     setLoading(true);
     try {
       const res = await fetch("/api/gateway/balance");
-      if (res.ok) {
-        const next: GatewayBalances = await res.json();
-        const prev = balancesRef.current;
-        if (prev && prev.gateway.available !== next.gateway.available) {
-          toast.success("Gateway balance updated", {
-            description: `Available: $${next.gateway.available} USDC`,
-          });
-        }
-        balancesRef.current = next;
-        setBalances(next);
+      if (!res.ok) throw new Error("Unable to load Gateway balances.");
+      const next: GatewayBalances = await res.json();
+      const prev = balancesRef.current;
+      if (prev && prev.gateway.available !== next.gateway.available) {
+        toast.success("Gateway balance updated", {
+          description: `Available: $${next.gateway.available} USDC`,
+        });
       }
-    } catch {
-      // ignore
+      balancesRef.current = next;
+      setBalances(next);
+      setBalanceError(null);
+    } catch (cause) {
+      setBalanceError(cause instanceof Error ? cause.message : "Unable to load Gateway balances.");
     } finally {
       setLoading(false);
     }
@@ -111,6 +112,7 @@ export function TopBarGatewayControls() {
           <GatewayBalanceDialog
             balances={balances}
             loading={loading}
+            error={balanceError}
             onRefresh={fetchBalances}
             trigger={
               <Button

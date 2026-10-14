@@ -124,11 +124,11 @@ export function WithdrawDialog({ maxAvailable, onWithdraw }: WithdrawDialogProps
         onWithdraw();
 
         toast.success(`Withdrawn ${data.amount} USDC`, {
-          description: (
+          description: explorerUrl ? (
             <a href={explorerUrl} target="_blank" rel="noreferrer" className="underline">
               View confirmed transaction
             </a>
-          ),
+          ) : `Transaction: ${data.txHash}`,
           duration: 10000,
         });
       }

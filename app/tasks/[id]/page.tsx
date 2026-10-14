@@ -9,7 +9,7 @@ import { useAccount, usePublicClient, useSignMessage, useWriteContract } from "w
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { isAddress } from "viem";
 import { getWorkerSessionChallengeMessage } from "@/lib/worker-session-auth";
-import { getTaskSubmissionNotice, postTaskAnswer } from "@/lib/task-submission-client";
+import { getTaskSubmissionNotice, isTaskRewardConfirmed, postTaskAnswer } from "@/lib/task-submission-client";
 import { BrandLink } from "@/components/brand-link";
 
 type Task = {
@@ -399,12 +399,12 @@ function TaskDetailContent() {
             <form onSubmit={handleSubmit}>
               {submissionNotice && (
                 <div className="task-result task-result-error">
-                  <span className="eyebrow">SUBMISSION FAILED</span>
+                  <span className="eyebrow">{result?.correct === false ? "ANSWER NOT ACCEPTED" : "SUBMISSION NEEDS ATTENTION"}</span>
                   <p>{submissionNotice}</p>
                 </div>
               )}
 
-              {result?.correct && (result.credited || task.contract_version === "v1") && (
+              {isTaskRewardConfirmed(task.contract_version, result) && (
                 <div className="task-result task-result-success">
                   <span className="eyebrow">{task.contract_version === "v2" ? "EARNINGS CREDITED" : "PAYMENT CONFIRMED"}</span>
 

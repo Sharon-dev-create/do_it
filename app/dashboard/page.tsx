@@ -119,6 +119,7 @@ function CopyableCell({
         <TooltipTrigger asChild>
           <button
             onClick={handleCopy}
+            aria-label={`Copy ${label ?? value}`}
             className="text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-pointer"
           >
             <Copy size={12} />
@@ -254,6 +255,9 @@ export default function Dashboard() {
 
       <div className="flex items-center gap-3 mb-4">
         <Input
+          aria-label={activeTab === "payments"
+            ? "Filter payments by transaction hash, payer, or endpoint"
+            : "Filter withdrawals by transaction hash, address, chain, or status"}
           placeholder={
             activeTab === "payments"
               ? "Filter by tx hash, payer, or endpoint..."
@@ -310,6 +314,7 @@ export default function Dashboard() {
                     <button
                       className="inline-flex items-center gap-1 hover:text-foreground transition-colors ml-auto"
                       onClick={() => handleSort("amount")}
+                      aria-pressed={sortField === "amount"}
                     >
                       Amount (USDC)
                       <SortIcon
@@ -321,6 +326,7 @@ export default function Dashboard() {
                     <button
                       className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
                       onClick={() => handleSort("date")}
+                      aria-pressed={sortField === "date"}
                     >
                       Date
                       <SortIcon direction={sortField === "date" ? sortDirection : "default"} />
@@ -411,6 +417,7 @@ export default function Dashboard() {
                     <button
                       className="inline-flex items-center gap-1 hover:text-foreground transition-colors ml-auto"
                       onClick={() => handleSort("amount")}
+                      aria-pressed={sortField === "amount"}
                     >
                       Amount (USDC)
                       <SortIcon
@@ -422,6 +429,7 @@ export default function Dashboard() {
                     <button
                       className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
                       onClick={() => handleSort("date")}
+                      aria-pressed={sortField === "date"}
                     >
                       Date
                       <SortIcon direction={sortField === "date" ? sortDirection : "default"} />
@@ -516,6 +524,7 @@ export default function Dashboard() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={clampedPage <= 1}
+              aria-label="Previous page"
               className="inline-flex items-center justify-center rounded-md border h-8 w-8 disabled:opacity-30 hover:bg-muted transition-colors"
             >
               <ChevronLeft size={16} />
@@ -523,6 +532,7 @@ export default function Dashboard() {
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={clampedPage >= totalPages}
+              aria-label="Next page"
               className="inline-flex items-center justify-center rounded-md border h-8 w-8 disabled:opacity-30 hover:bg-muted transition-colors"
             >
               <ChevronRight size={16} />

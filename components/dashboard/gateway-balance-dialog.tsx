@@ -42,6 +42,7 @@ export interface GatewayBalances {
 interface GatewayBalanceDialogProps {
   balances: GatewayBalances | null;
   loading: boolean;
+  error: string | null;
   onRefresh: () => void;
   trigger: React.ReactNode;
 }
@@ -49,6 +50,7 @@ interface GatewayBalanceDialogProps {
 export function GatewayBalanceDialog({
   balances,
   loading,
+  error,
   onRefresh,
   trigger,
 }: GatewayBalanceDialogProps) {
@@ -97,8 +99,10 @@ export function GatewayBalanceDialog({
               ${balances.wallet.balance}
             </div>
           </div>
+        ) : error ? (
+          <p role="alert" className="text-sm text-destructive">{error}</p>
         ) : (
-          <p className="text-sm text-muted-foreground">Could not load balances.</p>
+          <p className="text-sm text-muted-foreground">Balance data is not available yet.</p>
         )}
       </DialogContent>
     </Dialog>
