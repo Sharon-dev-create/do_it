@@ -193,19 +193,19 @@ export function EscrowEarnings() {
         <p className="text-2xl font-semibold">{address && chainId === 5042002 && typeof balance === "bigint" ? formatUnits(balance, 6) : "—"} <span className="text-sm">USDC</span></p>
       </div>
     </div>
-    {!address ? <p className="mt-4 text-sm text-muted-foreground">Connect your worker wallet to read escrow earnings.</p> : chainId !== ARC_TESTNET_CHAIN_ID ? <p className="mt-4 text-sm text-amber-700">Switch to Arc Testnet to read and withdraw V2 earnings.</p> : null}
+    {!address ? <p className="mt-4 text-sm text-muted-foreground">Connect your worker wallet to read escrow earnings.</p> : chainId !== ARC_TESTNET_CHAIN_ID ? <p className="mt-4 text-sm text-[var(--doit-brand-warning)]">Switch to Arc Testnet to read and withdraw V2 earnings.</p> : null}
     {address && chainId === ARC_TESTNET_CHAIN_ID && typeof balance === "bigint" && <div className="mt-3 text-sm">
       <span className="font-medium">$1.00 app withdrawal eligibility: </span>
       <span>{meetsWorkerWithdrawalMinimum(balance) ? "Eligible" : "Not yet eligible"}</span>
       <p className="mt-1 text-xs text-muted-foreground">Display indicator only in this phase. The existing contract accepts any positive withdrawal amount.</p>
     </div>}
-    {readError && <p className="mt-3 text-sm text-red-600">Unable to read your V2 escrow balance. Check the Arc Testnet RPC.</p>}
+    {readError && <p className="mt-3 text-sm text-[var(--doit-brand-error)]">Unable to read your V2 escrow balance. Check the Arc Testnet RPC.</p>}
     {isLoading && <p className="mt-3 text-sm text-muted-foreground">Loading escrow balance…</p>}
     <div className="mt-4 flex flex-wrap gap-2">
       <input aria-label="USDC amount to withdraw" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Amount (USDC)" className="h-10 w-44 rounded-md border bg-background px-3 text-sm" disabled={busy || isPending || !address || chainId !== 5042002} />
       <button type="button" onClick={withdraw} disabled={busy || isPending || !address || chainId !== 5042002} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{busy || isPending ? "Withdrawing…" : "Withdraw earnings"}</button>
     </div>
-    {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
+    {error && <p role="alert" className="mt-3 text-sm text-[var(--doit-brand-error)]">{error}</p>}
     {txHash && <p className="mt-3 text-sm">Withdrawal transaction: <a className="underline" href={`${explorer}/tx/${txHash}`} target="_blank" rel="noreferrer">{txHash}</a></p>}
     <div className="mt-5 border-t pt-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -215,7 +215,7 @@ export function EscrowEarnings() {
           : historyHasMore && <button type="button" onClick={() => loadHistoryPage({ cursor: historyCursor, scanBeforeBlock, reset: false })} disabled={historyLoading} className="rounded-md border px-3 py-2 text-sm disabled:opacity-50">{historyLoading ? "Loading…" : "Load older history"}</button>}
       </div>
       <p className="mt-1 text-xs text-muted-foreground">A wallet signature authorizes a read of this wallet’s history only. Event indexing scans stop 12 blocks behind the chain head. Receipts are checked against the current canonical block when recorded, but later reorganizations are not automatically reconciled.</p>
-      {historyError && <p role="alert" className="mt-3 text-sm text-red-600">{historyError}</p>}
+      {historyError && <p role="alert" className="mt-3 text-sm text-[var(--doit-brand-error)]">{historyError}</p>}
       {historyLoaded && historyWallet?.toLowerCase() === address?.toLowerCase() && (
         history.length ? <ul className="mt-3 divide-y rounded-md border">
           {history.filter((item) => item.status === "confirmed").map((item) => <li key={getWorkerWithdrawalEventKey({ chainId: item.chain_id, contractAddress: item.contract_address, transactionHash: item.tx_hash, logIndex: item.log_index })} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">

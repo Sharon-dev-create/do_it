@@ -511,7 +511,7 @@ function TaskDetailContent() {
               >
                 {submitting ? "VERIFYING / CLAIMING..." : "SUBMIT ANSWER"}
               </button>
-              {task.contract_version === "v2" && <p className="mt-4 text-xs text-amber-800">Testnet only: V2 earnings are credited to the escrow balance; they are not transferred until you withdraw. Only configured test workers may use this flow. The contract itself still permits unrestricted direct claims, so this is not a public-marketplace security boundary.</p>}
+              {task.contract_version === "v2" && <p className="mt-4 text-xs text-[var(--doit-brand-warning)]">Testnet only: V2 earnings are credited to the escrow balance; they are not transferred until you withdraw. Only configured test workers may use this flow. The contract itself still permits unrestricted direct claims, so this is not a public-marketplace security boundary.</p>}
             </form>
           ) : (
             <div className="task-closed-state">

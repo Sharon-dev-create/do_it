@@ -63,7 +63,9 @@ export default function RootLayout({
             try {
               const saved = localStorage.getItem("doit-theme");
               if (saved === "light" || saved === "dark" || saved === "system") preference = saved;
-            } catch {}
+            } catch {
+              preference = "system";
+            }
             const dark = preference === "dark" || (preference === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
             document.documentElement.dataset.themePreference = preference;
             document.documentElement.dataset.theme = dark ? "dark" : "light";
