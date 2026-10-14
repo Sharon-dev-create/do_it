@@ -28,5 +28,4 @@ const handler = async (_req: NextRequest) => {
   });
 };
 
-export const dynamic = "force-dynamic";
 export const GET = withGateway(handler, "$0.001", "/api/premium/quote");

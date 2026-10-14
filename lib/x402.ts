@@ -18,7 +18,7 @@
 
 import { BatchFacilitatorClient } from "@circle-fin/x402-batching/server";
 import { createClient } from "@supabase/supabase-js";
-import { NextRequest, NextResponse } from "next/server";
+import { connection, NextRequest, NextResponse } from "next/server";
 import { assertGatewayAvailable, SERVER_ARC_NETWORK_CONFIG } from "@/lib/arc-network-server";
 import { assertPaymentNetwork } from "@/lib/arc-network";
 import {
@@ -77,6 +77,8 @@ export function withGateway(
   endpoint: string,
 ) {
   return async (req: NextRequest) => {
+    await connection();
+    const paymentSignature = req.headers.get("payment-signature");
     let requirements: ReturnType<typeof buildPaymentRequirements>;
     try {
       assertGatewayAvailable();
@@ -93,8 +95,6 @@ export function withGateway(
         { status: 503 },
       );
     }
-    const paymentSignature = req.headers.get("payment-signature");
-
     // No payment — return 402 with Gateway batching payment requirements
     if (!paymentSignature) {
       console.log(`[x402] 402 Payment Required: ${endpoint}`);

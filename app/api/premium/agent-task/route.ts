@@ -38,5 +38,4 @@ const handler = async (_req: NextRequest) => {
   });
 };
 
-export const dynamic = "force-dynamic";
 export const GET = withGateway(handler, "$0.03", "/api/premium/agent-task");

@@ -35,5 +35,4 @@ const handler = async (req: NextRequest) => {
   });
 };
 
-export const dynamic = "force-dynamic";
 export const POST = withGateway(handler, "$0.0003", "/api/premium/compute");
