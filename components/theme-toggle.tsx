@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useThemePreference, type ThemePreference } from "@/components/theme-provider";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,72 +12,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type ThemePreference = "light" | "dark" | "system";
-type ResolvedTheme = "light" | "dark";
-
-const STORAGE_KEY = "doit-theme";
-
-function getResolvedTheme(preference: ThemePreference): ResolvedTheme {
-  if (preference !== "system") return preference;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-}
-
-function applyTheme(preference: ThemePreference) {
-  const root = document.documentElement;
-  root.dataset.themePreference = preference;
-  root.dataset.theme = getResolvedTheme(preference);
-}
-
 export function ThemeToggle() {
-  const [preference, setPreference] = useState<ThemePreference>("system");
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
-
-  useEffect(() => {
-    let savedPreference: ThemePreference = "system";
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored === "light" || stored === "dark" || stored === "system") {
-        savedPreference = stored;
-      }
-    } catch {
-      // The pre-render initializer already applied the system theme.
-    }
-
-    setPreference(savedPreference);
-    setResolvedTheme(getResolvedTheme(savedPreference));
-    applyTheme(savedPreference);
-  }, []);
-
-  useEffect(() => {
-    if (preference !== "system") return;
-
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const updateTheme = () => {
-      const resolved = media.matches ? "dark" : "light";
-      document.documentElement.dataset.theme = resolved;
-      setResolvedTheme(resolved);
-    };
-
-    updateTheme();
-    media.addEventListener("change", updateTheme);
-    return () => media.removeEventListener("change", updateTheme);
-  }, [preference]);
-
-  function selectPreference(value: string) {
-    if (value !== "light" && value !== "dark" && value !== "system") return;
-
-    setPreference(value);
-    const resolved = getResolvedTheme(value);
-    setResolvedTheme(resolved);
-    applyTheme(value);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, value);
-    } catch {
-      // Theme changes remain active for this page even if storage is unavailable.
-    }
-  }
+  const { preference, resolvedTheme, setPreference } = useThemePreference();
 
   const Icon = resolvedTheme === "dark" ? Moon : Sun;
   const preferenceLabel =
@@ -102,7 +38,11 @@ export function ThemeToggle() {
         <DropdownMenuLabel>Appearance</DropdownMenuLabel>
         <DropdownMenuRadioGroup
           value={preference}
-          onValueChange={selectPreference}
+          onValueChange={(value) => {
+            if (value === "light" || value === "dark" || value === "system") {
+              setPreference(value);
+            }
+          }}
           aria-label="Color theme preference"
         >
           <DropdownMenuRadioItem value="light">

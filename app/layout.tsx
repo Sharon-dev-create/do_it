@@ -18,8 +18,6 @@
 
 import type { Metadata } from "next";
 import Script from "next/script";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "sonner";
 import { Providers } from "@/app/providers";
 import "./globals.css";
 
@@ -74,7 +72,6 @@ export default function RootLayout({
       />
       <body className="antialiased">
         <Providers>{children}</Providers>
-        <Toaster richColors position="bottom-right" />
       </body>
     </html>
   );
