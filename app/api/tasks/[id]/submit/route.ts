@@ -127,7 +127,7 @@ async function submitV2(task: V2TaskRecord, taskId: string, worker: string, answ
 
 async function submitV1(task: Record<string, any>, worker: string, answer: string) {
   try { assertGatewayAvailable(); }
-  catch { return NextResponse.json({ error: "V1 Gateway payouts are unavailable on Arc Mainnet with the installed Circle SDK." }, { status: 503 }); }
+  catch { return NextResponse.json({ error: "Circle Gateway is unavailable for the selected Arc network." }, { status: 503 }); }
   if (task.status !== "open") return NextResponse.json({ error: "Task is no longer open" }, { status: 409 });
   const isCorrect = answer.trim().toLowerCase() === String(task.correct_answer ?? "").trim().toLowerCase();
   if (!isCorrect) {

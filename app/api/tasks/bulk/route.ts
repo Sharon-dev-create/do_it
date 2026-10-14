@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     assertGatewayAvailable();
   } catch {
     return NextResponse.json(
-      { error: "V1 Gateway task creation is unavailable on Arc Mainnet with the installed Circle SDK." },
+      { error: "Circle Gateway is unavailable for the selected Arc network." },
       { status: 503 },
     );
   }

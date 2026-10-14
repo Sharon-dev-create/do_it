@@ -62,13 +62,6 @@ export async function POST(
     if (task.contract_version === "v2") {
       return NextResponse.json({ error: "V2 tasks cannot be paid or retried through Circle Gateway" }, { status: 409 });
     }
-    if (ARC_NETWORK_CONFIG.name === "mainnet") {
-      return NextResponse.json(
-        { error: "Legacy Gateway payment retries are unavailable on Arc Mainnet with the installed Circle SDK." },
-        { status: 503 },
-      );
-    }
-
     // A historical hash means an earlier attempt may have been broadcast; never resend it.
     if (payment.tx_hash) {
       return NextResponse.json({ error: "This payment has an existing transaction hash. Reconcile it before any retry.", txHash: payment.tx_hash, requiresReconciliation: true }, { status: 409 });

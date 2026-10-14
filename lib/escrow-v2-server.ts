@@ -13,7 +13,6 @@ import { getConfiguredVerifierAddress, SERVER_ARC_NETWORK_CONFIG } from "@/lib/a
 
 export const ARC_CHAIN_ID = ARC_NETWORK_CONFIG.chainId;
 export const ARC_EXPLORER = ARC_NETWORK_CONFIG.explorerUrl;
-export const V2_VERIFIER = getConfiguredVerifierAddress();
 
 const arcChain = {
   id: ARC_CHAIN_ID,
@@ -32,7 +31,8 @@ export function getVerifierWalletClient() {
     process.env.SELLER_PRIVATE_KEY,
   );
   const account = privateKeyToAccount(key);
-  if (account.address.toLowerCase() !== V2_VERIFIER.toLowerCase()) {
+  const verifierAddress = getConfiguredVerifierAddress();
+  if (account.address.toLowerCase() !== verifierAddress.toLowerCase()) {
     throw new Error(`Configured ${ARC_NETWORK_CONFIG.label} verifier signer does not match the configured verifier address`);
   }
   return createWalletClient({ account, chain: arcChain, transport: http(SERVER_ARC_NETWORK_CONFIG.rpcUrl) });
@@ -46,6 +46,7 @@ export function isConfiguredV2Worker(address: string): boolean {
 }
 
 export async function assertArcEscrowDeployment() {
+  const expectedVerifierAddress = getConfiguredVerifierAddress();
   assertArcChainId(ARC_NETWORK_CONFIG.name, await escrowPublicClient.getChainId());
   const bytecode = await escrowPublicClient.getCode({ address: DO_IT_ESCROW_ADDRESS });
   if (!bytecode || bytecode === "0x") {
@@ -54,7 +55,7 @@ export async function assertArcEscrowDeployment() {
   if (ARC_NETWORK_CONFIG.name === "mainnet") {
     assertRuntimeCodeHash(bytecode, process.env.ARC_MAINNET_ESCROW_CODE_HASH);
   }
-  const [tokenAddress, verifierAddress] = await Promise.all([
+  const [tokenAddress, deployedVerifierAddress] = await Promise.all([
     escrowPublicClient.readContract({
       address: DO_IT_ESCROW_ADDRESS,
       abi: DO_IT_ESCROW_ABI,
@@ -69,7 +70,7 @@ export async function assertArcEscrowDeployment() {
   if (tokenAddress.toLowerCase() !== ARC_NETWORK_CONFIG.usdcAddress.toLowerCase()) {
     throw new Error(`Configured escrow uses an unexpected USDC address on ${ARC_NETWORK_CONFIG.label}.`);
   }
-  if (verifierAddress.toLowerCase() !== V2_VERIFIER.toLowerCase()) {
+  if (deployedVerifierAddress.toLowerCase() !== expectedVerifierAddress.toLowerCase()) {
     throw new Error(`Configured escrow verifier does not match the ${ARC_NETWORK_CONFIG.label} verifier address.`);
   }
   const usdcDecimals = await escrowPublicClient.readContract({
