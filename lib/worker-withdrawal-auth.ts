@@ -1,5 +1,4 @@
 import { isAddress, verifyMessage } from "viem";
-import { ARC_CHAIN_ID } from "@/lib/arc-network";
 
 export type WorkerWithdrawalPageCursor = { blockNumber: string; logIndex: number };
 
@@ -58,11 +57,12 @@ export function getWorkerWithdrawalChallengeMessage(
   workerAddress: string,
   nonce: string,
   expiresAt: string,
+  chainId = 5042002,
 ) {
   return [
     "Do-It V2 worker withdrawal history authorization",
     `Wallet: ${workerAddress.toLowerCase()}`,
-    `Chain ID: ${ARC_CHAIN_ID}`,
+    `Chain ID: ${chainId}`,
     `Nonce: ${nonce}`,
     `Expires at: ${expiresAt}`,
     "This signature authorizes one read of this wallet's confirmed V2 escrow withdrawal history.",
@@ -74,12 +74,13 @@ export async function verifyWorkerWithdrawalChallenge(
   nonce: string,
   expiresAt: string,
   signature: `0x${string}`,
+  chainId = 5042002,
 ) {
   if (!isAddress(workerAddress, { strict: false })) return false;
   try {
     return await verifyMessage({
       address: workerAddress as `0x${string}`,
-      message: getWorkerWithdrawalChallengeMessage(workerAddress, nonce, expiresAt),
+      message: getWorkerWithdrawalChallengeMessage(workerAddress, nonce, expiresAt, chainId),
       signature,
     });
   } catch {

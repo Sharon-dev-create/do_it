@@ -6,6 +6,7 @@ import { useAccount, useReadContract, usePublicClient, useSignMessage, useWriteC
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { getWorkerWithdrawalEventKey, meetsWorkerWithdrawalMinimum } from "@/lib/worker-withdrawal-auth";
 import { ARC_CHAIN_ID, ARC_EXPLORER, ARC_NETWORK_CONFIG } from "@/lib/arc-network";
+import { assertClientArcEscrowDeployment } from "@/lib/arc-deployment-client";
 
 const PAGE_SIZE = 25;
 
@@ -142,6 +143,8 @@ export function EscrowEarnings() {
     if (typeof balance !== "bigint" || units > balance) return setError("Amount exceeds your available escrow earnings.");
     setBusy(true);
     try {
+      if (!publicClient) throw new Error(`${ARC_NETWORK_CONFIG.label} RPC is unavailable.`);
+      await assertClientArcEscrowDeployment(publicClient);
       const hash = await writeContractAsync({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, functionName: "withdraw", args: [units], chainId: ARC_CHAIN_ID });
       setTxHash(hash);
       const receipt = await publicClient.waitForTransactionReceipt({ hash });

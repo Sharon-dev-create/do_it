@@ -28,6 +28,7 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { BrandLink } from "@/components/brand-link";
+import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 
 export function TopBarGatewayControls() {
   const [balances, setBalances] = useState<GatewayBalances | null>(null);
@@ -91,6 +92,17 @@ export function TopBarGatewayControls() {
       supabase.removeChannel(channel);
     };
   }, [fetchBalances]);
+
+  if (ARC_NETWORK_CONFIG.name === "mainnet") {
+    return (
+      <div className="flex flex-1 items-center justify-between gap-3 min-w-0">
+        <BrandLink compact />
+        <span className="text-xs text-muted-foreground">
+          Circle Gateway is unavailable on Arc Mainnet in the installed SDK.
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-1 items-center justify-between gap-3 min-w-0">

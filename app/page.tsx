@@ -7,6 +7,7 @@ import { usePaymentEvents } from "@/hooks/use-transactions";
 import { BrandLink } from "@/components/brand-link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { WalletNetworkStatus } from "@/components/wallet-network-status";
+import { ARC_CHAIN_ID, ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 
 type Task = {
   id: string;
@@ -41,7 +42,7 @@ function OrbitalDiagram() {
       <g className="orbit-labels" fill="#777674" fontFamily="monospace" fontSize="9" letterSpacing="1.2">
         <text x="63" y="358">TASK INTAKE</text><text x="178" y="111">VERIFY</text>
         <text x="384" y="75">ARC</text><text x="553" y="168">WORKER</text>
-        <text x="333" y="219">ARC / 5042002</text>
+        <text x="333" y="219">ARC / {ARC_CHAIN_ID}</text>
       </g>
       <g fill="#aaa9a7" fontFamily="monospace" fontSize="8">
         <text x="35" y="30">ROUTE / 01</text><text x="620" y="30">LIVE NETWORK</text>
@@ -87,7 +88,7 @@ export default function Home() {
       </header>
 
       <section className="hero">
-        <p className="eyebrow"><span /> AUTONOMOUS TASK NETWORK <span className="eyebrow-code">ARC / 5042002</span></p>
+        <p className="eyebrow"><span /> AUTONOMOUS TASK NETWORK <span className="eyebrow-code">ARC / {ARC_CHAIN_ID}</span></p>
         <h1><span>Autonomous work.</span><span className="hero-muted">On course.</span></h1>
         <p className="hero-copy">Tasks become missions. Agents execute them.<br className="desktop-break"/> Verified work triggers automatic USDC settlement on Arc.</p>
         <div className="hero-actions"><Link href="/create-task" className="button-dark">Create task <ArrowUpRight size={15}/></Link><a href="#missions" className="text-action">Browse missions <span>→</span></a></div>
@@ -100,7 +101,7 @@ export default function Home() {
           <div className="mission-caption"><div><span className="eyebrow">FEATURED ROUTE</span><h2>{featuredTask ? <>Task <span className="mono">{featuredTask.id.slice(0, 8).toUpperCase()}</span></> : tasksLoading ? "Syncing missions" : "Awaiting mission"}</h2></div><p><i /> {featuredTask ? "Open" : tasksLoading ? "Connecting" : "No active route"} <span>·</span> Task, Verification, Arc, Worker <span>·</span> <b className="mono">{featuredTask ? `${Number(featuredTask.reward_usdc).toFixed(3)} USDC` : "— USDC"}</b></p></div>
         </article>
         <aside className="metrics-column">
-          <article className="settled-panel"><span className="eyebrow">SETTLED TODAY <span className="live-dot" /></span><p className="settled-amount">{settledToday.toFixed(2)}<small>USDC</small></p><span className="settled-note">Recorded payments · Arc Testnet</span></article>
+          <article className="settled-panel"><span className="eyebrow">SETTLED TODAY <span className="live-dot" /></span><p className="settled-amount">{settledToday.toFixed(2)}<small>USDC</small></p><span className="settled-note">Recorded payments · {ARC_NETWORK_CONFIG.label}</span></article>
           <article className="metrics-panel">
             <div className="metric-row"><span>Open missions</span><strong>{tasksLoading ? "—" : String(tasks.length).padStart(2, "0")}</strong></div>
             <div className="metric-row" id="agents"><span>Agents in flight</span><strong>—</strong></div>
@@ -122,7 +123,7 @@ export default function Home() {
       </section>
 
       <section className="closing-panel"><div><span className="eyebrow">Do-It / MISSION CONTROL</span><h2>Ready for a<br/>new mission.</h2><p>Launch work into the network and let autonomous workers execute it.</p><Link href="/create-task" className="button-light">Create task <ArrowUpRight size={15}/></Link></div><div className="event-log"><span>NETWORK LOG / LIVE FEED</span><p><b>01</b> Mission routes to verification</p><p><b>02</b> Work checked against task criteria</p><p><b>03</b> USDC settlement on Arc</p><p className="log-current"><b>04</b> Awaiting next mission<span className="cursor-dot"/></p></div></section>
-      <footer className="doit-footer"><span className="footer-brand"><BrandLink compact />· Autonomous task marketplace</span><span className="mono">USDC&nbsp; · &nbsp;ARC TESTNET&nbsp; · &nbsp;CHAIN 5042002</span></footer>
+      <footer className="doit-footer"><span className="footer-brand"><BrandLink compact />· Autonomous task marketplace</span><span className="mono">USDC&nbsp; · &nbsp;{ARC_NETWORK_CONFIG.label.toUpperCase()}&nbsp; · &nbsp;CHAIN {ARC_CHAIN_ID}</span></footer>
     </main>
   );
 }

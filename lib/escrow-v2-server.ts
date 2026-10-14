@@ -1,9 +1,9 @@
 import "server-only";
-import { createPublicClient, createWalletClient, http, isAddress, parseUnits, type Address } from "viem";
+import { createPublicClient, createWalletClient, erc20Abi, http, isAddress, parseUnits, type Address } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { isV2TestWorkerAllowed } from "@/lib/v2-test-workers";
-import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
+import { ARC_NETWORK_CONFIG, assertRuntimeCodeHash } from "@/lib/arc-network";
 import { getConfiguredVerifierAddress, SERVER_ARC_NETWORK_CONFIG } from "@/lib/arc-network-server";
 
 export const ARC_CHAIN_ID = ARC_NETWORK_CONFIG.chainId;
@@ -31,8 +31,11 @@ export function getVerifierWalletClient() {
   return createWalletClient({ account, chain: arcChain, transport: http(SERVER_ARC_NETWORK_CONFIG.rpcUrl) });
 }
 
-export function isConfiguredV2TestWorker(address: string): boolean {
-  return isV2TestWorkerAllowed(address, process.env.DOIT_V2_TEST_WORKERS);
+export function isConfiguredV2Worker(address: string): boolean {
+  const workerAllowlist = ARC_NETWORK_CONFIG.name === "mainnet"
+    ? process.env.DOIT_MAINNET_WORKERS
+    : process.env.DOIT_V2_TEST_WORKERS;
+  return isV2TestWorkerAllowed(address, workerAllowlist);
 }
 
 export async function assertArcEscrowDeployment() {
@@ -42,6 +45,9 @@ export async function assertArcEscrowDeployment() {
   const bytecode = await escrowPublicClient.getCode({ address: DO_IT_ESCROW_ADDRESS });
   if (!bytecode || bytecode === "0x") {
     throw new Error(`No escrow contract is deployed at the configured ${ARC_NETWORK_CONFIG.label} address.`);
+  }
+  if (ARC_NETWORK_CONFIG.name === "mainnet") {
+    assertRuntimeCodeHash(bytecode, process.env.ARC_MAINNET_ESCROW_CODE_HASH);
   }
   const [tokenAddress, verifierAddress] = await Promise.all([
     escrowPublicClient.readContract({
@@ -60,6 +66,14 @@ export async function assertArcEscrowDeployment() {
   }
   if (verifierAddress.toLowerCase() !== V2_VERIFIER.toLowerCase()) {
     throw new Error(`Configured escrow verifier does not match the ${ARC_NETWORK_CONFIG.label} verifier address.`);
+  }
+  const usdcDecimals = await escrowPublicClient.readContract({
+    address: ARC_NETWORK_CONFIG.usdcAddress,
+    abi: erc20Abi,
+    functionName: "decimals",
+  });
+  if (usdcDecimals !== ARC_NETWORK_CONFIG.usdcDecimals) {
+    throw new Error(`USDC ERC-20 decimals do not match the ${ARC_NETWORK_CONFIG.label} configuration.`);
   }
 }
 

@@ -6,6 +6,7 @@ import { ArrowDown, ArrowUpRight, Search } from "lucide-react";
 import { BrandLink } from "@/components/brand-link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { WalletNetworkStatus } from "@/components/wallet-network-status";
+import { ARC_CHAIN_ID, ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 
 type Mission = {
   id: string;
@@ -85,11 +86,11 @@ export default function TaskMarketplace() {
 
       <section className="market-heading">
         <div>
-          <p className="eyebrow"><span className="market-heading-dot"/> AVAILABLE WORK / ARC TESTNET</p>
+          <p className="eyebrow"><span className="market-heading-dot"/> AVAILABLE WORK / {ARC_NETWORK_CONFIG.label.toUpperCase()}</p>
           <h1>MISSIONS<span>.</span></h1>
           <p className="market-subtitle">Available work ready for autonomous execution.</p>
         </div>
-        <div className="market-heading-side"><span className="eyebrow">OPEN ROUTES</span><strong>{loading ? "—" : String(missions.length).padStart(2, "0")}</strong><span className="mono">CHAIN 5042002</span></div>
+        <div className="market-heading-side"><span className="eyebrow">OPEN ROUTES</span><strong>{loading ? "—" : String(missions.length).padStart(2, "0")}</strong><span className="mono">CHAIN {ARC_CHAIN_ID}</span></div>
       </section>
 
       <section className="market-toolbar" aria-label="Mission controls">

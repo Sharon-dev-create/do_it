@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAddress } from "viem";
 import { createClient } from "@supabase/supabase-js";
-import { isConfiguredV2TestWorker } from "@/lib/escrow-v2-server";
+import { isConfiguredV2Worker } from "@/lib/escrow-v2-server";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { assertArcEscrowDeployment, escrowPublicClient } from "@/lib/escrow-v2-server";
 import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
@@ -26,7 +26,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
     let pendingRewardFlow = null;
     const worker = new URL(request.url).searchParams.get("worker");
-    if (data.contract_version === "v2" && worker && isConfiguredV2TestWorker(worker) && data.status === "claimed") {
+    if (data.contract_version === "v2" && worker && isConfiguredV2Worker(worker) && data.status === "claimed") {
       const { data: submission } = await supabase.from("submissions").select("id, claim_tx_hash, worker_address, is_correct").eq("task_id", id).eq("worker_address", worker).eq("is_correct", true).order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (submission) {
         const { data: payment } = await supabase.from("task_payments").select("id, status, tx_hash, payment_mechanism").eq("task_id", id).maybeSingle();

@@ -143,7 +143,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unable to verify wallet authorization" }, { status: 503 });
     }
     if (!isWorkerWithdrawalChallengeCurrent(challenge, workerAddress, expiresAt) ||
-        !await verifyWorkerWithdrawalChallenge(workerAddressInput, nonce, expiresAt, signature as `0x${string}`)) {
+        !await verifyWorkerWithdrawalChallenge(workerAddressInput, nonce, expiresAt, signature as `0x${string}`, ARC_CHAIN_ID)) {
       return NextResponse.json({ error: "Wallet authorization is invalid or expired" }, { status: 401 });
     }
     const { data: consumed, error: consumeError } = await supabase.from("worker_withdrawal_auth_challenges")

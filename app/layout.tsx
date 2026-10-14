@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     : {}),
   title: "Do-It",
   description:
-    "A task marketplace for useful work and USDC micropayments on Arc Testnet.",
+    "A task marketplace for useful work and USDC micropayments on Arc.",
   icons: {
     icon: [{ url: "/brand/do-it-mark.png", type: "image/png" }],
     apple: [{ url: "/brand/do-it-mark.png", type: "image/png" }],
@@ -35,14 +35,14 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Do-It",
     description:
-      "A task marketplace for useful work and USDC micropayments on Arc Testnet.",
+      "A task marketplace for useful work and USDC micropayments on Arc.",
     type: "website",
   },
   twitter: {
     card: "summary",
     title: "Do-It",
     description:
-      "A task marketplace for useful work and USDC micropayments on Arc Testnet.",
+      "A task marketplace for useful work and USDC micropayments on Arc.",
   },
 };
 

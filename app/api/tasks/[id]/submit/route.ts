@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { decodeEventLog, isAddress, isHash } from "viem";
 import { payWorker } from "@/lib/payout";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
-import { ARC_CHAIN_ID, assertArcEscrowDeployment, escrowPublicClient, getVerifierWalletClient, isConfiguredV2TestWorker, verifyV2TaskRecord } from "@/lib/escrow-v2-server";
+import { ARC_CHAIN_ID, assertArcEscrowDeployment, escrowPublicClient, getVerifierWalletClient, isConfiguredV2Worker, verifyV2TaskRecord } from "@/lib/escrow-v2-server";
 import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 import { assertGatewayAvailable } from "@/lib/arc-network-server";
 import { getTaskCreatorSubmissionError } from "@/lib/submission-auth";
@@ -23,7 +23,7 @@ type V2TaskRecord = {
 };
 
 async function submitV2(task: V2TaskRecord, taskId: string, worker: string, answer: string, claimHash?: string, submissionId?: string) {
-  if (!isConfiguredV2TestWorker(worker)) return NextResponse.json({ error: "This V2 deployment accepts submissions only from configured workers." }, { status: 403 });
+  if (!isConfiguredV2Worker(worker)) return NextResponse.json({ error: "This V2 deployment accepts submissions only from configured workers." }, { status: 403 });
   try { await assertArcEscrowDeployment(); }
   catch { return NextResponse.json({ error: `${ARC_NETWORK_CONFIG.label} escrow deployment is unavailable or misconfigured.` }, { status: 503 }); }
   if ((await escrowPublicClient.getChainId()) !== ARC_CHAIN_ID) return NextResponse.json({ error: `${ARC_NETWORK_CONFIG.label} RPC is unavailable or misconfigured` }, { status: 503 });

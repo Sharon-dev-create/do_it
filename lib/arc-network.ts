@@ -1,3 +1,5 @@
+import { keccak256 } from "viem";
+
 export type ArcNetworkName = "testnet" | "mainnet";
 
 export type ArcNetworkConfig = {
@@ -81,6 +83,13 @@ export function assertPaymentNetwork(
     throw new Error(
       `Payment network ${paymentNetwork} does not match the selected Arc network ${expected}.`,
     );
+  }
+}
+
+export function assertRuntimeCodeHash(bytecode: `0x${string}`, expectedHash: string | undefined) {
+  if (!expectedHash || !/^0x[0-9a-fA-F]{64}$/.test(expectedHash) ||
+      keccak256(bytecode).toLowerCase() !== expectedHash.toLowerCase()) {
+    throw new Error("Escrow runtime bytecode does not match the configured audited code hash.");
   }
 }
 

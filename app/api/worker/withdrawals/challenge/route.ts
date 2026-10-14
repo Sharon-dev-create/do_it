@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { isAddress } from "viem";
 import { getWorkerWithdrawalChallengeMessage } from "@/lib/worker-withdrawal-auth";
+import { ARC_CHAIN_ID } from "@/lib/escrow-v2-server";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       nonce,
       expiresAt: savedExpiry,
-      message: getWorkerWithdrawalChallengeMessage(normalizedAddress, nonce, savedExpiry),
+      message: getWorkerWithdrawalChallengeMessage(normalizedAddress, nonce, savedExpiry, ARC_CHAIN_ID),
     });
   } catch {
     return NextResponse.json({ error: "Unable to create a wallet authorization challenge" }, { status: 500 });

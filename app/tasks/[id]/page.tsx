@@ -13,6 +13,7 @@ import { getTaskSubmissionNotice, isTaskRewardConfirmed, postTaskAnswer } from "
 import { BrandLink } from "@/components/brand-link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ARC_CHAIN_ID, ARC_EXPLORER_URL, ARC_NETWORK_CONFIG } from "@/lib/arc-network";
+import { assertClientArcEscrowDeployment } from "@/lib/arc-deployment-client";
 
 type Task = {
   id: string;
@@ -262,6 +263,7 @@ function TaskDetailContent() {
     try {
       let claimTxHash = pendingClaim?.submissionId === submissionId ? pendingClaim.claimTxHash : undefined;
       if (!claimTxHash) {
+        await assertClientArcEscrowDeployment(publicClient);
         claimTxHash = await writeContractAsync({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, functionName: "claimTask", args: [BigInt(task.blockchain_task_id)], chainId: ARC_CHAIN_ID });
         const receipt = await publicClient.waitForTransactionReceipt({ hash: claimTxHash });
         if (receipt.status !== "success") throw new Error(`Claim transaction reverted: ${claimTxHash}`);

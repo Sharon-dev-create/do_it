@@ -2,15 +2,15 @@
 
 ### A task marketplace for useful work and USDC micropayments
 
-Do-It is an application prototype for publishing small digital tasks, collecting worker submissions, and coordinating rewards through Circle Gateway or an Arc Testnet escrow contract. It brings task details, wallet identity, payment records, and transaction verification into one workflow.
+Do-It is an application prototype for publishing small digital tasks, collecting worker submissions, and coordinating rewards through Circle Gateway or an Arc escrow contract.
 
-> **Project status:** active prototype. The application currently targets Arc Testnet. V2 worker submissions are restricted by an application-configured test-worker list; the restriction is not enforced by the escrow contract itself. Do not use this repository as a production marketplace without a separate security and operational review.
+> **Project status:** Arc Testnet remains available for development. Arc Mainnet configuration is fail-closed and V2 transactions require a separately audited deployment, matching runtime code hash, and verified verifier configuration. Circle Gateway paths remain testnet-only because the installed SDK does not support Arc Mainnet. V2 worker submission restrictions are application-level only and are not enforced by the escrow contract.
 
 ## Overview
 
 Small online tasks can be awkward to coordinate: creators need a way to describe and verify work, while contributors need clear reward terms and a workable way to get paid. Manual review and conventional payment rails can add friction, especially for low-value work.
 
-Do-It explores a task economy where creators publish work, contributors submit answers, and accepted work can trigger USDC settlement. Circle Gateway supports the project's testnet payment flows; Arc provides the EVM network used by the current payment and V2 escrow implementation. Circle Gateway and Arc are integrations used by Do-It, not protocols created by this project.
+Do-It explores a task economy where creators publish work, contributors submit answers, and accepted work can trigger USDC settlement. Circle Gateway supports the project's testnet payment flows; Arc provides the EVM network used by the V2 escrow implementation. Circle Gateway and Arc are integrations used by Do-It, not protocols created by this project.
 
 The app is intended for task creators, workers, and developers exploring small-value payment flows. Example app uses include simple research, content checks, data labeling, and paid API demonstrations.
 
@@ -49,7 +49,7 @@ flowchart TD
 
 ## Features
 
-- **Single V2 task creation:** creates, funds, and records a task using the Arc Testnet escrow contract.
+- **Single V2 task creation:** creates, funds, and records a task using the escrow configured for the selected Arc network.
 - **CSV task creation:** parses and validates batches of up to 250 V1 Gateway tasks, with a 2 MB upload limit, batch idempotency, row feedback, and downloadable invalid-row reports.
 - **Task discovery and submission:** browse open tasks, view task details, and submit answers using a wallet-bound server session.
 - **Creator task management:** inspect creator tasks and delete eligible unused tasks or archive records that have submissions, payments, or V2 escrow history; archival requires the applicable server-side and chain-state checks.
@@ -87,7 +87,7 @@ flowchart LR
 - **Wallet integration:** RainbowKit and wagmi connect browser wallets and submit the explicit Arc transactions required for task creation, V2 claiming, and withdrawal. A signed worker session is used for API identity; the session cookie is server-validated.
 - **Supabase:** stores task metadata, submissions, payment status, batch idempotency records, wallet challenges, and withdrawal history. Server API routes use the service-role key for privileged operations. Keep that key server-side.
 - **Circle Gateway:** used by the V1 Gateway payout flow and the separate x402-protected API examples. The app's V1 payout code requests a Circle transfer attestation, then submits a Gateway mint transaction on Arc.
-- **Arc Testnet:** provides the current EVM network, test USDC, RPC reads, and transactions for the V2 escrow and Gateway settlement paths.
+- **Arc:** the selected environment configures either Arc Testnet or Arc Mainnet for V2 escrow reads and transactions. The Gateway integration remains testnet-only.
 - **DoItEscrowV2:** holds creator-funded task rewards. The verifier credits accepted rewards to workers' on-contract balances; workers withdraw those balances in a separate transaction.
 
 ## Technology Stack
@@ -191,27 +191,39 @@ The `/api/premium/quote`, `/dataset`, `/compute`, and `/agent-task` routes use a
 
 ## Environment Variables
 
-The table reflects variables referenced in source. `.env.example` is not exhaustive: it currently omits `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` and `ARC_RPC_URL`. Variables used only by Vercel or the runtime platform are not listed.
+Set both `ARC_NETWORK` and `NEXT_PUBLIC_ARC_NETWORK` to the same explicit value (`testnet` or `mainnet`). Missing or mismatched selections fail closed. Use independent Vercel environments and separate Supabase projects for testnet and production; do not point production at the testnet database.
 
 | Variable | Required? | Exposure | Purpose |
 | --- | --- | --- | --- |
+| `ARC_NETWORK` | Yes | Server configuration | Selects `testnet` or `mainnet`; must match the public selector. |
+| `NEXT_PUBLIC_ARC_NETWORK` | Yes | Client-visible | Selects the same Arc network for RainbowKit, wallet status, and browser transactions. |
+| `NEXT_PUBLIC_ARC_TESTNET_RPC_URL` / `ARC_TESTNET_RPC_URL` | Optional | Public RPC / server config | Testnet RPC overrides. The server rejects an RPC whose chain ID is not 5042002. |
+| `NEXT_PUBLIC_ARC_MAINNET_RPC_URL` / `ARC_MAINNET_RPC_URL` | Optional | Public RPC / server config | Mainnet RPC overrides. The server rejects an RPC whose chain ID is not 5042. |
+| `NEXT_PUBLIC_ARC_MAINNET_ESCROW_ADDRESS` | Required for Mainnet | Public contract address | Address of the separately audited and verified Mainnet escrow deployment. |
+| `ARC_MAINNET_ESCROW_ADDRESS` | Required for Mainnet | Server config | Must match the public escrow address. |
+| `NEXT_PUBLIC_ARC_MAINNET_ESCROW_CODE_HASH` | Required for Mainnet | Public runtime-code hash | Expected runtime bytecode hash from the reviewed Mainnet deployment. |
+| `ARC_MAINNET_ESCROW_CODE_HASH` | Required for Mainnet | Server config | Must match the public code hash; checked against on-chain runtime bytecode. |
+| `NEXT_PUBLIC_ARC_MAINNET_VERIFIER_ADDRESS` | Required for Mainnet | Public contract address | Must match the verifier configured in the escrow. |
+| `ARC_MAINNET_VERIFIER_ADDRESS` | Required for Mainnet | Server config | Must match the public verifier address and deployed contract getter. |
+| `ARC_MAINNET_DEPLOYMENT_BLOCK` | Required for Mainnet | Server config | Verified escrow deployment block used to bound withdrawal history scans. |
+| `DOIT_MAINNET_VERIFIER_PRIVATE_KEY` | Required for Mainnet reward credit | **Server-only secret** | Dedicated mainnet verifier key. Never reuse a testnet signer. |
+| `DOIT_MAINNET_WORKERS` | Required for Mainnet V2 submissions | Server configuration | Production worker allowlist; separate from the testnet list. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Client-visible | Supabase project URL used by browser, server, and API clients. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes | Client-visible | Supabase publishable/anon key used by browser and SSR clients. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes, server operations | **Server-only secret** | Privileged database access and HMAC secret for worker session cookies. Never expose it to browser code. |
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Yes for wallet UI | Client-visible | RainbowKit project configuration. |
 | `SELLER_ADDRESS` | Yes for Gateway seller features | Public address | x402 payment destination and seller Gateway balance identity. |
-| `SELLER_PRIVATE_KEY` | Yes for V1 payouts/Gateway withdrawals | **Server-only secret** | Signs server-side Gateway operations. It is also a fallback V2 signer only if it derives to the configured verifier address. |
-| `ARC_RPC_URL` | Required for V1 task payout | Server configuration | Arc RPC used to retrieve nonce and send Gateway mint transactions. No code fallback is set in that payout path. |
-| `ARC_TESTNET_RPC_URL` | Optional | Server configuration | V2 server RPC override; defaults to `https://rpc.testnet.arc.network`. |
-| `DOIT_VERIFIER_PRIVATE_KEY` | Required for V2 reward credit unless seller key matches verifier | **Server-only secret** | Dedicated signer for the V2 verifier. The derived address is checked against the configured verifier address. |
-| `DOIT_V2_TEST_WORKERS` | Required for V2 worker submissions | Server configuration | Comma-separated wallet allowlist for the app's V2 submission route. It does not restrict direct contract calls. |
+| `SELLER_PRIVATE_KEY` | Testnet Gateway only | **Server-only secret** | Testnet Gateway signer. Never use for Mainnet. |
+| `DOIT_VERIFIER_PRIVATE_KEY` | Testnet V2 reward credit | **Server-only secret** | Testnet verifier key. Never reuse on Mainnet. |
+| `ARC_TESTNET_VERIFIER_ADDRESS` | Optional for Testnet | Server configuration | Expected testnet verifier address; defaults to the current testnet deployment. |
+| `DOIT_V2_TEST_WORKERS` | Testnet V2 submissions | Server configuration | Testnet worker allowlist. It does not restrict direct contract calls. |
 | `BUYER_PRIVATE_KEY` | Optional; required for agent | **Server/CLI secret** | Funds the agent's ephemeral wallet and deposits into Gateway. Never use a valuable wallet for this demo. |
 | `OPENAI_API_KEY` | Optional | Server/CLI secret | Enables the agent's model-backed behavior; the script has a mock/scripted fallback when omitted. |
 | `BASE_URL` | Optional; agent only | Local configuration | Agent API base URL; defaults to `http://localhost:3000`. |
 | `DEPOSIT_AMOUNT` | Optional; agent only | Local configuration | USDC amount the agent deposits; defaults to `1`. |
 | `PORT` | Optional | Local configuration | Port used by the development server/runtime when supported. |
 
-`BUYER_ADDRESS` appears in `.env.example`, but the current agent derives its wallet address from `BUYER_PRIVATE_KEY` and does not read `BUYER_ADDRESS`. Use testnet-only wallets and credentials for the prototype. Never put private keys, service-role keys, or OpenAI keys in `NEXT_PUBLIC_*` variables or client components.
+`BUYER_ADDRESS` appears in `.env.example`, but the current agent derives its wallet address from `BUYER_PRIVATE_KEY` and does not read `BUYER_ADDRESS`. The agent and Circle Gateway paths are testnet-only. Never put private keys, service-role keys, or OpenAI keys in `NEXT_PUBLIC_*` variables or client components. `.env.example` distinguishes public browser settings from server-only signing secrets.
 
 ## Usage Guide
 

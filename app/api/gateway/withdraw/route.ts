@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     ) {
       return NextResponse.json(
         {
-          error: `Seller wallet (${gateway.address}) has no native tokens on Arc Testnet to pay for gas fees. Fund it with testnet ETH first.`,
+          error: `Seller wallet (${gateway.address}) has no native USDC on Arc Testnet to pay for gas fees. Fund the wallet with testnet USDC first.`,
         },
         { status: 400 },
       );
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
           SUPPORTED_CHAIN_LABELS[destinationChain] ?? destinationChain;
         return NextResponse.json(
           {
-            error: `Seller wallet (${destGateway.address}) has no native tokens on ${chainLabel} to pay for the mint transaction gas fees. Fund it with testnet ETH on ${chainLabel} first.`,
+            error: `Seller wallet (${destGateway.address}) has no native gas token on ${chainLabel} to pay for the mint transaction. Fund it with the appropriate testnet gas token first.`,
           },
           { status: 400 },
         );
@@ -213,8 +213,8 @@ export async function POST(req: NextRequest) {
       raw.includes("gas required exceeds allowance")
     ) {
       message = isCrossChain
-        ? `Seller wallet (${gateway.address}) has no native tokens on ${chainLabel} to pay for the CCTP mint transaction. Fund it with testnet ETH on ${chainLabel} and retry.`
-        : `Seller wallet has insufficient native tokens to pay for gas. Fund ${gateway.address} with testnet ETH and retry.`;
+        ? `Seller wallet (${gateway.address}) has no native gas token on ${chainLabel} to pay for the CCTP mint transaction. Fund it with the appropriate testnet gas token and retry.`
+        : `Seller wallet has insufficient native USDC to pay for gas on Arc Testnet. Fund ${gateway.address} with testnet USDC and retry.`;
     }
 
     return NextResponse.json({ error: message }, { status: 500 });

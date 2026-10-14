@@ -5,11 +5,20 @@ import { isAddress } from "viem";
 import { getCreatorWallet } from "@/lib/creator-session";
 import { isValidBulkTask } from "@/lib/bulk-task-validation";
 import { BULK_TASK_MAX_FILE_BYTES } from "@/lib/bulk-task-csv";
+import { assertGatewayAvailable } from "@/lib/arc-network-server";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function POST(request: Request) {
+  try {
+    assertGatewayAvailable();
+  } catch {
+    return NextResponse.json(
+      { error: "V1 Gateway task creation is unavailable on Arc Mainnet with the installed Circle SDK." },
+      { status: 503 },
+    );
+  }
   const wallet = await getCreatorWallet();
   if (!wallet) return NextResponse.json({ error: "Authorize your creator wallet first" }, { status: 401 });
   const origin = request.headers.get("origin");
