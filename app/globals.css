@@ -628,3 +628,9 @@
     background: #aaa9a7;
   }
 }
+
+@media (max-width: 650px) {
+  .hero h1 {
+    font-size: clamp(34px, 10.6vw, 46px);
+  }
+}
