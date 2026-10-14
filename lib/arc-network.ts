@@ -16,6 +16,66 @@ export type ArcNetworkConfig = {
 
 export const ARC_USDC_ADDRESS =
   "0x3600000000000000000000000000000000000000" as const;
+export const ARC_TESTNET_ESCROW_ADDRESS =
+  "0x024539183A57428C63B2F2628b881105213332E4" as const;
+export const ARC_TESTNET_VERIFIER_ADDRESS =
+  "0x41aa5227695B8c6c5FfAD3bF3A9aAF0626921d0E" as const;
+
+export function getArcRpcOverride(
+  network: ArcNetworkName,
+  rpcUrl: string | undefined,
+  settingName: string,
+): string | undefined {
+  const configuredUrl = rpcUrl?.trim();
+  if (network === "mainnet" && !configuredUrl) {
+    throw new Error(`${settingName} must be explicitly configured for Arc Mainnet.`);
+  }
+  if (!configuredUrl) return undefined;
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(configuredUrl);
+  } catch {
+    throw new Error(`${settingName} must be a valid HTTP(S) URL.`);
+  }
+  if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+    throw new Error(`${settingName} must be a valid HTTP(S) URL.`);
+  }
+  return configuredUrl;
+}
+
+export function assertNotTestnetDeploymentAddress(
+  network: ArcNetworkName,
+  address: string,
+  testnetAddress: string,
+  description: string,
+) {
+  if (network === "mainnet" && address.toLowerCase() === testnetAddress.toLowerCase()) {
+    throw new Error(`The Arc Testnet ${description} address cannot be used on Mainnet.`);
+  }
+}
+
+export function assertArcChainId(network: ArcNetworkName, actualChainId: number) {
+  const expectedChainId = getArcNetworkConfig(network).chainId;
+  if (actualChainId !== expectedChainId) {
+    throw new Error(
+      `RPC chain ID ${actualChainId} does not match the selected Arc network ${expectedChainId}.`,
+    );
+  }
+}
+
+export function getArcVerifierPrivateKey(
+  network: ArcNetworkName,
+  mainnetKey: string | undefined,
+  testnetKey: string | undefined,
+  testnetSellerKey: string | undefined,
+): `0x${string}` {
+  const key = network === "mainnet" ? mainnetKey : testnetKey || testnetSellerKey;
+  if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) {
+    throw new Error(`The ${network} V2 verifier signer is not configured.`);
+  }
+  return key as `0x${string}`;
+}
 
 export function parseArcNetworkName(value: string | undefined): ArcNetworkName {
   if (value === "testnet" || value === "mainnet") return value;
@@ -58,7 +118,7 @@ export function getArcNetworkConfig(
 export function assertGatewayNetwork(name: ArcNetworkName): asserts name is "testnet" {
   if (name !== "testnet") {
     throw new Error(
-      "Circle Gateway on Arc Mainnet is unavailable in the installed SDK; this operation is disabled.",
+      "Circle Gateway on Arc Mainnet is disabled because the installed @circle-fin/x402-batching 2.0.4 SDK does not expose Circle's documented `arc` configuration.",
     );
   }
 }
@@ -100,9 +160,15 @@ export function getArcTransactionUrl(network: ArcNetworkName, txHash: string) {
 const publicNetwork = parseArcNetworkName(process.env.NEXT_PUBLIC_ARC_NETWORK);
 export const ARC_NETWORK_CONFIG = getArcNetworkConfig(
   publicNetwork,
-  publicNetwork === "testnet"
-    ? process.env.NEXT_PUBLIC_ARC_TESTNET_RPC_URL
-    : process.env.NEXT_PUBLIC_ARC_MAINNET_RPC_URL,
+  getArcRpcOverride(
+    publicNetwork,
+    publicNetwork === "testnet"
+      ? process.env.NEXT_PUBLIC_ARC_TESTNET_RPC_URL
+      : process.env.NEXT_PUBLIC_ARC_MAINNET_RPC_URL,
+    publicNetwork === "testnet"
+      ? "NEXT_PUBLIC_ARC_TESTNET_RPC_URL"
+      : "NEXT_PUBLIC_ARC_MAINNET_RPC_URL",
+  ),
 );
 export const ARC_CHAIN_ID = ARC_NETWORK_CONFIG.chainId;
 export const ARC_EXPLORER_URL = ARC_NETWORK_CONFIG.explorerUrl;

@@ -3,7 +3,12 @@ import { createPublicClient, createWalletClient, erc20Abi, http, isAddress, pars
 import { privateKeyToAccount } from "viem/accounts";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { isV2TestWorkerAllowed } from "@/lib/v2-test-workers";
-import { ARC_NETWORK_CONFIG, assertRuntimeCodeHash } from "@/lib/arc-network";
+import {
+  ARC_NETWORK_CONFIG,
+  assertArcChainId,
+  assertRuntimeCodeHash,
+  getArcVerifierPrivateKey,
+} from "@/lib/arc-network";
 import { getConfiguredVerifierAddress, SERVER_ARC_NETWORK_CONFIG } from "@/lib/arc-network-server";
 
 export const ARC_CHAIN_ID = ARC_NETWORK_CONFIG.chainId;
@@ -20,11 +25,13 @@ const arcChain = {
 export const escrowPublicClient = createPublicClient({ chain: arcChain, transport: http(SERVER_ARC_NETWORK_CONFIG.rpcUrl) });
 
 export function getVerifierWalletClient() {
-  const key = ARC_NETWORK_CONFIG.name === "mainnet"
-    ? process.env.DOIT_MAINNET_VERIFIER_PRIVATE_KEY
-    : process.env.DOIT_VERIFIER_PRIVATE_KEY || process.env.SELLER_PRIVATE_KEY;
-  if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("V2 verifier signer is not configured");
-  const account = privateKeyToAccount(key as `0x${string}`);
+  const key = getArcVerifierPrivateKey(
+    ARC_NETWORK_CONFIG.name,
+    process.env.DOIT_MAINNET_VERIFIER_PRIVATE_KEY,
+    process.env.DOIT_VERIFIER_PRIVATE_KEY,
+    process.env.SELLER_PRIVATE_KEY,
+  );
+  const account = privateKeyToAccount(key);
   if (account.address.toLowerCase() !== V2_VERIFIER.toLowerCase()) {
     throw new Error(`Configured ${ARC_NETWORK_CONFIG.label} verifier signer does not match the configured verifier address`);
   }
@@ -39,9 +46,7 @@ export function isConfiguredV2Worker(address: string): boolean {
 }
 
 export async function assertArcEscrowDeployment() {
-  if (await escrowPublicClient.getChainId() !== ARC_CHAIN_ID) {
-    throw new Error(`${ARC_NETWORK_CONFIG.label} RPC chain ID does not match the selected network.`);
-  }
+  assertArcChainId(ARC_NETWORK_CONFIG.name, await escrowPublicClient.getChainId());
   const bytecode = await escrowPublicClient.getCode({ address: DO_IT_ESCROW_ADDRESS });
   if (!bytecode || bytecode === "0x") {
     throw new Error(`No escrow contract is deployed at the configured ${ARC_NETWORK_CONFIG.label} address.`);

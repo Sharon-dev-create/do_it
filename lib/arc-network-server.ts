@@ -3,9 +3,14 @@ import "server-only";
 import { isAddress } from "viem";
 import {
   assertArcNetworkPair,
+  assertGatewayNetwork,
+  assertNotTestnetDeploymentAddress,
   assertRuntimeCodeHash,
+  getArcRpcOverride,
   getArcNetworkConfig,
   parseArcNetworkName,
+  ARC_TESTNET_ESCROW_ADDRESS,
+  ARC_TESTNET_VERIFIER_ADDRESS,
 } from "@/lib/arc-network";
 import { DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 
@@ -16,17 +21,17 @@ assertArcNetworkPair(network, publicNetwork);
 
 export const SERVER_ARC_NETWORK_CONFIG = getArcNetworkConfig(
   network,
-  network === "testnet"
-    ? process.env.ARC_TESTNET_RPC_URL
-    : process.env.ARC_MAINNET_RPC_URL,
+  getArcRpcOverride(
+    network,
+    network === "testnet"
+      ? process.env.ARC_TESTNET_RPC_URL
+      : process.env.ARC_MAINNET_RPC_URL,
+    network === "testnet" ? "ARC_TESTNET_RPC_URL" : "ARC_MAINNET_RPC_URL",
+  ),
 );
 
 export function assertGatewayAvailable() {
-  if (!SERVER_ARC_NETWORK_CONFIG.gatewayChain) {
-    throw new Error(
-      "Circle Gateway on Arc Mainnet is unavailable in the installed SDK; this operation is disabled.",
-    );
-  }
+  assertGatewayNetwork(SERVER_ARC_NETWORK_CONFIG.name);
 }
 
 export function getConfiguredVerifierAddress(): `0x${string}` {
@@ -40,6 +45,12 @@ export function getConfiguredVerifierAddress(): `0x${string}` {
       `${SERVER_ARC_NETWORK_CONFIG.label} verifier address is missing or invalid.`,
     );
   }
+  assertNotTestnetDeploymentAddress(
+    SERVER_ARC_NETWORK_CONFIG.name,
+    address,
+    ARC_TESTNET_VERIFIER_ADDRESS,
+    "verifier",
+  );
   return address;
 }
 
@@ -63,6 +74,12 @@ if (SERVER_ARC_NETWORK_CONFIG.name === "mainnet") {
       "ARC_MAINNET_ESCROW_ADDRESS must be valid and match NEXT_PUBLIC_ARC_MAINNET_ESCROW_ADDRESS.",
     );
   }
+  assertNotTestnetDeploymentAddress(
+    network,
+    serverAddress,
+    ARC_TESTNET_ESCROW_ADDRESS,
+    "escrow",
+  );
   if (!process.env.ARC_MAINNET_DEPLOYMENT_BLOCK ||
       !/^\d+$/.test(process.env.ARC_MAINNET_DEPLOYMENT_BLOCK)) {
     throw new Error(

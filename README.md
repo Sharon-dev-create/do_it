@@ -4,7 +4,7 @@
 
 Do-It is an application prototype for publishing small digital tasks, collecting worker submissions, and coordinating rewards through Circle Gateway or an Arc escrow contract.
 
-> **Project status:** Arc Testnet remains available for development. Arc Mainnet configuration is fail-closed and V2 transactions require a separately audited deployment, matching runtime code hash, and verified verifier configuration. Circle Gateway paths remain testnet-only because the installed SDK does not support Arc Mainnet. V2 worker submission restrictions are application-level only and are not enforced by the escrow contract.
+> **Project status:** Arc Testnet remains available for development. Arc Mainnet configuration is fail-closed and V2 transactions require a separately audited deployment, matching runtime code hash, verified verifier configuration, and explicit Mainnet RPC configuration. Circle's Gateway documentation supports Mainnet Arc, but the installed SDK 2.0.4 does not expose its `arc` chain; Gateway paths remain disabled until that SDK integration is upgraded and validated. V2 worker submission restrictions are application-level only and are not enforced by the escrow contract.
 
 ## Overview
 
@@ -110,7 +110,9 @@ Network selection is explicit and must match in the server and browser environme
 
 The existing escrow address `0x024539183A57428C63B2F2628b881105213332E4` and verifier `0x41aa5227695B8c6c5FfAD3bF3A9aAF0626921d0E` are testnet-only. No Arc Mainnet escrow deployment is included. Mainnet V2 routes require a separately reviewed deployment, matching runtime bytecode hash, and verifier configuration before the application will use that address.
 
-The installed `@circle-fin/x402-batching` SDK supports `arcTestnet` but does not define Arc Mainnet. Gateway balance/withdrawal, V1 Gateway payouts, and x402 Gateway settlement therefore remain disabled on Mainnet. The bulk-task endpoint rejects Mainnet requests rather than creating tasks whose payout path cannot execute.
+Circle's current Gateway documentation lists Arc Mainnet as `arc` (domain `26`) and supports nanopayments. The installed `@circle-fin/x402-batching` SDK 2.0.4 exposes `arcTestnet` only and does not define the documented Mainnet `arc` chain. Gateway balance/withdrawal, V1 Gateway payouts, and x402 Gateway settlement therefore remain disabled on Mainnet. The bulk-task endpoint rejects Mainnet requests rather than creating tasks whose payout path cannot execute.
+
+**Supported upgrade path (not applied):** the published `@circle-fin/x402-batching` 3.5.0 package exposes `CHAIN_CONFIGS.arc`, `GATEWAY_DOMAINS.arc`, a Mainnet Arc chain (5042), the Arc USDC address, and Mainnet Gateway wallet/minter addresses; it also selects `https://gateway-api.circle.com/v1` for Mainnet. Upgrading requires reviewing its major-version API changes and migrating each existing manually constructed Gateway/x402 flow, then validating signed requirements, attestation and on-chain settlement against Circle's current docs. Do not merely change `arcTestnet` to `arc` or reuse Testnet API endpoints.
 
 ### V1 Gateway tasks
 
@@ -200,7 +202,7 @@ Set both `ARC_NETWORK` and `NEXT_PUBLIC_ARC_NETWORK` to the same explicit value 
 | `ARC_NETWORK` | Yes | Server configuration | Selects `testnet` or `mainnet`; must match the public selector. |
 | `NEXT_PUBLIC_ARC_NETWORK` | Yes | Client-visible | Selects the same Arc network for RainbowKit, wallet status, and browser transactions. |
 | `NEXT_PUBLIC_ARC_TESTNET_RPC_URL` / `ARC_TESTNET_RPC_URL` | Optional | Public RPC / server config | Testnet RPC overrides. The server rejects an RPC whose chain ID is not 5042002. Default: `https://rpc.testnet.arc.io`. |
-| `NEXT_PUBLIC_ARC_MAINNET_RPC_URL` / `ARC_MAINNET_RPC_URL` | Optional | Public RPC / server config | Mainnet RPC overrides. The server rejects an RPC whose chain ID is not 5042. |
+| `NEXT_PUBLIC_ARC_MAINNET_RPC_URL` / `ARC_MAINNET_RPC_URL` | Required for Mainnet | Public RPC / server config | Explicit browser and server RPC endpoints. Missing values fail closed; escrow actions also reject endpoints reporting a chain ID other than 5042. |
 | `NEXT_PUBLIC_ARC_MAINNET_ESCROW_ADDRESS` | Required for Mainnet | Public contract address | Address of the separately audited and verified Mainnet escrow deployment. |
 | `ARC_MAINNET_ESCROW_ADDRESS` | Required for Mainnet | Server config | Must match the public escrow address. |
 | `NEXT_PUBLIC_ARC_MAINNET_ESCROW_CODE_HASH` | Required for Mainnet | Public runtime-code hash | Expected runtime bytecode hash from the reviewed Mainnet deployment. |

@@ -222,7 +222,7 @@ export function EscrowEarnings() {
       {historyLoaded && historyWallet?.toLowerCase() === address?.toLowerCase() && (
         history.length ? <ul className="mt-3 divide-y rounded-md border">
           {history.filter((item) => item.status === "confirmed").map((item) => <li key={getWorkerWithdrawalEventKey({ chainId: item.chain_id, contractAddress: item.contract_address, transactionHash: item.tx_hash, logIndex: item.log_index })} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
-            <span>{formatUnits(BigInt(item.amount_base_units), 6)} USDC</span>
+            <span>{formatUnits(BigInt(item.amount_base_units), ARC_NETWORK_CONFIG.usdcDecimals)} USDC</span>
             <span className="text-xs text-muted-foreground">{new Date(item.block_timestamp).toLocaleString()}</span>
             <a className="font-mono text-xs underline" href={`${explorer}/tx/${item.tx_hash}`} target="_blank" rel="noreferrer">{item.tx_hash.slice(0, 10)}…{item.tx_hash.slice(-8)}</a>
           </li>)}

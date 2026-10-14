@@ -57,7 +57,7 @@ export function getWorkerWithdrawalChallengeMessage(
   workerAddress: string,
   nonce: string,
   expiresAt: string,
-  chainId = 5042002,
+  chainId: number,
 ) {
   return [
     "Do-It V2 worker withdrawal history authorization",
@@ -74,7 +74,7 @@ export async function verifyWorkerWithdrawalChallenge(
   nonce: string,
   expiresAt: string,
   signature: `0x${string}`,
-  chainId = 5042002,
+  chainId: number,
 ) {
   if (!isAddress(workerAddress, { strict: false })) return false;
   try {

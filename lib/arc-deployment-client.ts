@@ -1,17 +1,20 @@
 "use client";
 
 import { erc20Abi, isAddress, type PublicClient } from "viem";
-import { ARC_CHAIN_ID, ARC_NETWORK_CONFIG, assertRuntimeCodeHash } from "@/lib/arc-network";
+import {
+  ARC_CHAIN_ID,
+  ARC_NETWORK_CONFIG,
+  ARC_TESTNET_VERIFIER_ADDRESS,
+  assertArcChainId,
+  assertNotTestnetDeploymentAddress,
+  assertRuntimeCodeHash,
+} from "@/lib/arc-network";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
-
-const TESTNET_VERIFIER = "0x41aa5227695B8c6c5FfAD3bF3A9aAF0626921d0E";
 
 export async function assertClientArcEscrowDeployment(
   publicClient: PublicClient,
 ) {
-  if (await publicClient.getChainId() !== ARC_CHAIN_ID) {
-    throw new Error(`Wallet RPC is not connected to ${ARC_NETWORK_CONFIG.label}.`);
-  }
+  assertArcChainId(ARC_NETWORK_CONFIG.name, await publicClient.getChainId());
   const bytecode = await publicClient.getCode({ address: DO_IT_ESCROW_ADDRESS });
   if (!bytecode || bytecode === "0x") {
     throw new Error(`No escrow contract is deployed at the configured ${ARC_NETWORK_CONFIG.label} address.`);
@@ -22,10 +25,16 @@ export async function assertClientArcEscrowDeployment(
 
   const expectedVerifier = ARC_NETWORK_CONFIG.name === "mainnet"
     ? process.env.NEXT_PUBLIC_ARC_MAINNET_VERIFIER_ADDRESS
-    : process.env.NEXT_PUBLIC_ARC_TESTNET_VERIFIER_ADDRESS || TESTNET_VERIFIER;
+    : process.env.NEXT_PUBLIC_ARC_TESTNET_VERIFIER_ADDRESS || ARC_TESTNET_VERIFIER_ADDRESS;
   if (!expectedVerifier || !isAddress(expectedVerifier)) {
     throw new Error(`The ${ARC_NETWORK_CONFIG.label} verifier address is not configured.`);
   }
+  assertNotTestnetDeploymentAddress(
+    ARC_NETWORK_CONFIG.name,
+    expectedVerifier,
+    ARC_TESTNET_VERIFIER_ADDRESS,
+    "verifier",
+  );
   const [tokenAddress, verifierAddress, tokenDecimals] = await Promise.all([
     publicClient.readContract({
       address: DO_IT_ESCROW_ADDRESS,
