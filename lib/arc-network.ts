@@ -14,7 +14,7 @@ export type ArcNetworkConfig = {
   gatewayChain: "arcTestnet" | null;
 };
 
-const ARC_USDC_ADDRESS =
+export const ARC_USDC_ADDRESS =
   "0x3600000000000000000000000000000000000000" as const;
 
 export function parseArcNetworkName(value: string | undefined): ArcNetworkName {

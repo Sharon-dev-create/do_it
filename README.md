@@ -322,7 +322,7 @@ From the repository root:
 ```bash
 npm run lint
 npm run build
-node --experimental-transform-types --no-warnings --test lib/*.test.mjs
+NEXT_PUBLIC_ARC_NETWORK=testnet node --experimental-transform-types --no-warnings --test lib/*.test.mjs
 ```
 
 There is no root `npm test` script. For Solidity tests, run `forge test` from `contracts/`. Do not run deployment scripts as part of routine validation.

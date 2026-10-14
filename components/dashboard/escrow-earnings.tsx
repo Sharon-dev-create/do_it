@@ -5,10 +5,11 @@ import { decodeEventLog, formatUnits, isAddress, parseUnits } from "viem";
 import { useAccount, useReadContract, usePublicClient, useSignMessage, useWriteContract } from "wagmi";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { getWorkerWithdrawalEventKey, meetsWorkerWithdrawalMinimum } from "@/lib/worker-withdrawal-auth";
-import { ARC_CHAIN_ID, ARC_EXPLORER, ARC_NETWORK_CONFIG } from "@/lib/arc-network";
+import { ARC_CHAIN_ID, ARC_EXPLORER_URL, ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 import { assertClientArcEscrowDeployment } from "@/lib/arc-deployment-client";
 
 const PAGE_SIZE = 25;
+const explorer = ARC_EXPLORER_URL;
 
 type WithdrawalHistoryItem = {
   worker_address: string;
