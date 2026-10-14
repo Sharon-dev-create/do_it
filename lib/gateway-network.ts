@@ -106,15 +106,28 @@ export function getSupportedGatewayExtra(
       candidate.network === network,
   );
   const extra = kind?.extra;
+  const assets = extra?.assets;
+  const usdcAsset = Array.isArray(assets)
+    ? assets.find(
+        (asset): asset is Record<string, unknown> =>
+          typeof asset === "object" &&
+          asset !== null &&
+          "symbol" in asset &&
+          asset.symbol === "USDC",
+      )
+    : undefined;
   if (
     !extra ||
     extra.name !== "GatewayWalletBatched" ||
     extra.version !== "1" ||
     typeof extra.verifyingContract !== "string" ||
-    extra.verifyingContract.toLowerCase() !== config.gatewayWallet.toLowerCase()
+    extra.verifyingContract.toLowerCase() !== config.gatewayWallet.toLowerCase() ||
+    typeof usdcAsset?.address !== "string" ||
+    usdcAsset.address.toLowerCase() !== config.usdc.toLowerCase() ||
+    usdcAsset.decimals !== 6
   ) {
     throw new Error(
-      `Circle Gateway does not advertise the required x402 payment kind for ${network}.`,
+      `Circle Gateway does not advertise the required x402 USDC payment kind for ${network}.`,
     );
   }
   return extra;
