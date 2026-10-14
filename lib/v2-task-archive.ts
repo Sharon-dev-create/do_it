@@ -1,6 +1,6 @@
 import "server-only";
 import { isAddress, isHash, parseUnits } from "viem";
-import { ARC_CHAIN_ID, escrowPublicClient } from "@/lib/escrow-v2-server";
+import { ARC_CHAIN_ID, assertArcEscrowDeployment, escrowPublicClient } from "@/lib/escrow-v2-server";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { scanRefundLogRanges } from "@/lib/v2-refund-log-scan";
 import { verifyEscrowRefundReceipt, verifyEscrowRewardReceipt, verifyEscrowTaskReceipt } from "@/lib/v2-archive-receipt-verification";
@@ -22,6 +22,7 @@ type V2PaymentForArchive = {
 /** Return only terminal contract states whose allocation and settlement evidence is verifiable on Arc. */
 export async function getVerifiedV2TerminalStatus(task: V2TaskForArchive, payment: V2PaymentForArchive): Promise<3 | 4 | null> {
   try {
+    await assertArcEscrowDeployment();
     if ((await escrowPublicClient.getChainId()) !== ARC_CHAIN_ID || task.blockchain_task_id === null ||
         !task.create_tx_hash || !isHash(task.create_tx_hash) || !task.fund_tx_hash || !isHash(task.fund_tx_hash) ||
         !isAddress(task.created_by, { strict: false })) return null;

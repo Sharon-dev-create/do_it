@@ -3,7 +3,8 @@ import { isAddress } from "viem";
 import { createClient } from "@supabase/supabase-js";
 import { isConfiguredV2TestWorker } from "@/lib/escrow-v2-server";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
-import { escrowPublicClient } from "@/lib/escrow-v2-server";
+import { assertArcEscrowDeployment, escrowPublicClient } from "@/lib/escrow-v2-server";
+import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 import { getCreatorWallet } from "@/lib/creator-session";
 import { getVerifiedV2TerminalStatus } from "@/lib/v2-task-archive";
 
@@ -33,7 +34,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           let claimTxHash = submission.claim_tx_hash;
           if (!claimTxHash && data.blockchain_task_id !== null) {
             try {
-              const logs = await escrowPublicClient.getContractEvents({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, eventName: "TaskClaimed", args: { taskId: BigInt(data.blockchain_task_id), worker: worker as `0x${string}` }, fromBlock: 66340107n });
+              await assertArcEscrowDeployment();
+              const deploymentBlock = ARC_NETWORK_CONFIG.name === "mainnet"
+                ? BigInt(process.env.ARC_MAINNET_DEPLOYMENT_BLOCK!)
+                : 66_340_107n;
+              const logs = await escrowPublicClient.getContractEvents({ address: DO_IT_ESCROW_ADDRESS, abi: DO_IT_ESCROW_ABI, eventName: "TaskClaimed", args: { taskId: BigInt(data.blockchain_task_id), worker: worker as `0x${string}` }, fromBlock: deploymentBlock });
               claimTxHash = logs.at(-1)?.transactionHash ?? null;
               if (claimTxHash) await supabase.from("submissions").update({ claim_tx_hash: claimTxHash }).eq("id", submission.id);
             } catch { /* Keep the recovery endpoint available when Arc RPC is temporarily unavailable. */ }

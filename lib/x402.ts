@@ -20,6 +20,7 @@ import { BatchFacilitatorClient } from "@circle-fin/x402-batching/server";
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { assertGatewayAvailable, SERVER_ARC_NETWORK_CONFIG } from "@/lib/arc-network-server";
+import { assertPaymentNetwork } from "@/lib/arc-network";
 
 const ARC_TESTNET_NETWORK = "eip155:5042002";
 const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000";
@@ -86,6 +87,14 @@ export function withGateway(
     if (SERVER_ARC_NETWORK_CONFIG.chainId !== 5042002) {
       return NextResponse.json(
         { error: "Configured x402 payment requirements do not match Arc Testnet." },
+        { status: 503 },
+      );
+    }
+    try {
+      assertPaymentNetwork(SERVER_ARC_NETWORK_CONFIG.name, requirements.network);
+    } catch {
+      return NextResponse.json(
+        { error: "Configured x402 payment network does not match the server Arc network." },
         { status: 503 },
       );
     }

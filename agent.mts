@@ -74,6 +74,11 @@ async function promptForAllowance(): Promise<number> {
 }
 
 // --- Funder wallet (the one you funded via Circle faucet) ---
+if (process.env.ARC_NETWORK !== "testnet") {
+  console.error("The payment agent is testnet-only. Set ARC_NETWORK=testnet explicitly.");
+  process.exit(1);
+}
+
 const funderKey = process.env.BUYER_PRIVATE_KEY as `0x${string}` | undefined;
 if (!funderKey) {
   console.error(

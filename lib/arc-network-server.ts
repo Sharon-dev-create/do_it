@@ -2,6 +2,7 @@ import "server-only";
 
 import { isAddress } from "viem";
 import {
+  assertArcNetworkPair,
   getArcNetworkConfig,
   parseArcNetworkName,
 } from "@/lib/arc-network";
@@ -10,11 +11,7 @@ import { DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 const network = parseArcNetworkName(process.env.ARC_NETWORK);
 const publicNetwork = parseArcNetworkName(process.env.NEXT_PUBLIC_ARC_NETWORK);
 
-if (network !== publicNetwork) {
-  throw new Error(
-    "ARC_NETWORK must match NEXT_PUBLIC_ARC_NETWORK; refusing a mixed-network deployment.",
-  );
-}
+assertArcNetworkPair(network, publicNetwork);
 
 export const SERVER_ARC_NETWORK_CONFIG = getArcNetworkConfig(
   network,

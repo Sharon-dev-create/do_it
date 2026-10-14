@@ -20,7 +20,9 @@ const arcChain = {
 export const escrowPublicClient = createPublicClient({ chain: arcChain, transport: http(SERVER_ARC_NETWORK_CONFIG.rpcUrl) });
 
 export function getVerifierWalletClient() {
-  const key = process.env.DOIT_VERIFIER_PRIVATE_KEY || process.env.SELLER_PRIVATE_KEY;
+  const key = ARC_NETWORK_CONFIG.name === "mainnet"
+    ? process.env.DOIT_MAINNET_VERIFIER_PRIVATE_KEY
+    : process.env.DOIT_VERIFIER_PRIVATE_KEY || process.env.SELLER_PRIVATE_KEY;
   if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("V2 verifier signer is not configured");
   const account = privateKeyToAccount(key as `0x${string}`);
   if (account.address.toLowerCase() !== V2_VERIFIER.toLowerCase()) {

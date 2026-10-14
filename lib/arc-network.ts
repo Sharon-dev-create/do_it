@@ -61,6 +61,33 @@ export function assertGatewayNetwork(name: ArcNetworkName): asserts name is "tes
   }
 }
 
+export function assertArcNetworkPair(
+  serverNetwork: ArcNetworkName,
+  publicNetwork: ArcNetworkName,
+) {
+  if (serverNetwork !== publicNetwork) {
+    throw new Error(
+      "ARC_NETWORK must match NEXT_PUBLIC_ARC_NETWORK; refusing a mixed-network deployment.",
+    );
+  }
+}
+
+export function assertPaymentNetwork(
+  network: ArcNetworkName,
+  paymentNetwork: string,
+) {
+  const expected = `eip155:${getArcNetworkConfig(network).chainId}`;
+  if (paymentNetwork !== expected) {
+    throw new Error(
+      `Payment network ${paymentNetwork} does not match the selected Arc network ${expected}.`,
+    );
+  }
+}
+
+export function getArcTransactionUrl(network: ArcNetworkName, txHash: string) {
+  return `${getArcNetworkConfig(network).explorerUrl}/tx/${txHash}`;
+}
+
 const publicNetwork = parseArcNetworkName(process.env.NEXT_PUBLIC_ARC_NETWORK);
 export const ARC_NETWORK_CONFIG = getArcNetworkConfig(
   publicNetwork,

@@ -37,11 +37,11 @@ export async function payWorker(
   const gateway = new GatewayClient({
     chain: "arcTestnet",
     privateKey: privateKey as `0x${string}`,
-    rpcUrl: process.env.ARC_RPC_URL,
+    rpcUrl: SERVER_ARC_NETWORK_CONFIG.rpcUrl,
   });
 
   const config = CHAIN_CONFIGS.arcTestnet;
-  const rpcUrl = process.env.ARC_RPC_URL || SERVER_ARC_NETWORK_CONFIG.rpcUrl;
+  const rpcUrl = SERVER_ARC_NETWORK_CONFIG.rpcUrl;
   const rpcChainResponse = await fetch(rpcUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
