@@ -11,7 +11,7 @@ export type ArcNetworkConfig = {
   usdcAddress: `0x${string}`;
   usdcDecimals: 6;
   nativeCurrencyDecimals: 18;
-  gatewayChain: "arcTestnet" | null;
+  gatewayChain: "arcTestnet" | "arc" | null;
 };
 
 export const ARC_USDC_ADDRESS =
@@ -110,7 +110,7 @@ export function getArcNetworkConfig(
       usdcAddress: ARC_USDC_ADDRESS,
       usdcDecimals: 6,
       nativeCurrencyDecimals: 18,
-      gatewayChain: null,
+      gatewayChain: "arc",
     };
   }
 
@@ -127,11 +127,9 @@ export function getArcNetworkConfig(
   };
 }
 
-export function assertGatewayNetwork(name: ArcNetworkName): asserts name is "testnet" {
-  if (name !== "testnet") {
-    throw new Error(
-      "Circle Gateway on Arc Mainnet is disabled because the installed @circle-fin/x402-batching 2.0.4 SDK does not expose Circle's documented `arc` configuration.",
-    );
+export function assertGatewayNetwork(name: ArcNetworkName): void {
+  if (!getArcNetworkConfig(name).gatewayChain) {
+    throw new Error(`Circle Gateway is not supported on Arc ${name}.`);
   }
 }
 
