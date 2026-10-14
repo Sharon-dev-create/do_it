@@ -404,7 +404,7 @@ function TaskDetailContent() {
                 </div>
               )}
 
-              {isTaskRewardConfirmed(task.contract_version, result) && (
+              {result && isTaskRewardConfirmed(task.contract_version, result) && (
                 <div className="task-result task-result-success">
                   <span className="eyebrow">{task.contract_version === "v2" ? "EARNINGS CREDITED" : "PAYMENT CONFIRMED"}</span>
 
