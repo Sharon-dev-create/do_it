@@ -52,6 +52,7 @@ flowchart TD
 - **Single V2 task creation:** creates, funds, and records a task using the Arc Testnet escrow contract.
 - **CSV task creation:** parses and validates batches of up to 250 V1 Gateway tasks, with a 2 MB upload limit, batch idempotency, row feedback, and downloadable invalid-row reports.
 - **Task discovery and submission:** browse open tasks, view task details, and submit answers using a wallet-bound server session.
+- **Creator task management:** inspect creator tasks and delete eligible unused tasks or archive records that have submissions, payments, or V2 escrow history; archival requires the applicable server-side and chain-state checks.
 - **Separate V1 and V2 reward paths:** V1 uses the existing Circle Gateway payout path; V2 credits escrow earnings and supports direct worker withdrawal.
 - **Payment retry and reconciliation:** API routes inspect payment records and transaction receipts to handle incomplete or failed payment updates.
 - **Worker V2 earnings history:** reads the V2 contract balance and displays confirmed `EarningsWithdrawn` history recorded from verified Arc events.
