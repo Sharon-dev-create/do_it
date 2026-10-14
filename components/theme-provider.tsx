@@ -24,6 +24,8 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function readPreference(): ThemePreference {
+  if (typeof window === "undefined") return "system";
+
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (stored === "light" || stored === "dark" || stored === "system") {
@@ -37,26 +39,31 @@ function readPreference(): ThemePreference {
 
 function resolveTheme(preference: ThemePreference): ResolvedTheme {
   if (preference !== "system") return preference;
+  if (typeof window === "undefined") return "light";
   return window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
 }
 
-function applyTheme(preference: ThemePreference) {
+function applyTheme(preference: ThemePreference, resolved = resolveTheme(preference)) {
   const root = document.documentElement;
   root.dataset.themePreference = preference;
-  root.dataset.theme = resolveTheme(preference);
+  root.dataset.theme = resolved;
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [preference, setPreferenceState] =
-    useState<ThemePreference>("system");
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
+  const [preference, setPreferenceState] = useState<ThemePreference>(() =>
+    readPreference(),
+  );
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
+    resolveTheme(readPreference()),
+  );
 
   const setPreference = useCallback((nextPreference: ThemePreference) => {
     setPreferenceState(nextPreference);
-    setResolvedTheme(resolveTheme(nextPreference));
-    applyTheme(nextPreference);
+    const nextResolvedTheme = resolveTheme(nextPreference);
+    setResolvedTheme(nextResolvedTheme);
+    applyTheme(nextPreference, nextResolvedTheme);
     try {
       window.localStorage.setItem(STORAGE_KEY, nextPreference);
     } catch {
@@ -65,21 +72,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const initialPreference = readPreference();
-    setPreferenceState(initialPreference);
-    setResolvedTheme(resolveTheme(initialPreference));
-    applyTheme(initialPreference);
+    applyTheme(preference, resolvedTheme);
 
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== STORAGE_KEY && event.key !== null) return;
       const nextPreference = readPreference();
+      const nextResolvedTheme = resolveTheme(nextPreference);
       setPreferenceState(nextPreference);
-      setResolvedTheme(resolveTheme(nextPreference));
-      applyTheme(nextPreference);
+      setResolvedTheme(nextResolvedTheme);
+      applyTheme(nextPreference, nextResolvedTheme);
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
-  }, []);
+  }, [preference, resolvedTheme]);
 
   useEffect(() => {
     if (preference !== "system") return;
