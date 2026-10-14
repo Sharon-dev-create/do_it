@@ -1,4 +1,4 @@
-import { keccak256 } from "viem";
+import { isAddress, keccak256 } from "viem";
 
 export type ArcNetworkName = "testnet" | "mainnet";
 
@@ -53,6 +53,18 @@ export function assertNotTestnetDeploymentAddress(
   if (network === "mainnet" && address.toLowerCase() === testnetAddress.toLowerCase()) {
     throw new Error(`The Arc Testnet ${description} address cannot be used on Mainnet.`);
   }
+}
+
+export function requireMainnetDeploymentAddress(
+  address: string | undefined,
+  testnetAddress: string,
+  description: string,
+): `0x${string}` {
+  if (!address || !isAddress(address)) {
+    throw new Error(`Arc Mainnet ${description} address is missing or invalid.`);
+  }
+  assertNotTestnetDeploymentAddress("mainnet", address, testnetAddress, description);
+  return address;
 }
 
 export function assertArcChainId(network: ArcNetworkName, actualChainId: number) {

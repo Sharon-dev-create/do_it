@@ -4,13 +4,12 @@ import { isAddress } from "viem";
 import {
   assertArcNetworkPair,
   assertGatewayNetwork,
-  assertNotTestnetDeploymentAddress,
-  assertRuntimeCodeHash,
   getArcRpcOverride,
   getArcNetworkConfig,
   parseArcNetworkName,
   ARC_TESTNET_ESCROW_ADDRESS,
   ARC_TESTNET_VERIFIER_ADDRESS,
+  requireMainnetDeploymentAddress,
 } from "@/lib/arc-network";
 import { DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 
@@ -35,22 +34,18 @@ export function assertGatewayAvailable() {
 }
 
 export function getConfiguredVerifierAddress(): `0x${string}` {
-  const address =
-    SERVER_ARC_NETWORK_CONFIG.name === "mainnet"
-      ? process.env.ARC_MAINNET_VERIFIER_ADDRESS
-      : process.env.ARC_TESTNET_VERIFIER_ADDRESS ??
-        "0x41aa5227695B8c6c5FfAD3bF3A9aAF0626921d0E";
+  const address = SERVER_ARC_NETWORK_CONFIG.name === "mainnet"
+    ? requireMainnetDeploymentAddress(
+        process.env.ARC_MAINNET_VERIFIER_ADDRESS,
+        ARC_TESTNET_VERIFIER_ADDRESS,
+        "verifier",
+      )
+    : process.env.ARC_TESTNET_VERIFIER_ADDRESS ?? ARC_TESTNET_VERIFIER_ADDRESS;
   if (!address || !isAddress(address)) {
     throw new Error(
       `${SERVER_ARC_NETWORK_CONFIG.label} verifier address is missing or invalid.`,
     );
   }
-  assertNotTestnetDeploymentAddress(
-    SERVER_ARC_NETWORK_CONFIG.name,
-    address,
-    ARC_TESTNET_VERIFIER_ADDRESS,
-    "verifier",
-  );
   return address;
 }
 
@@ -67,19 +62,16 @@ if (!publicVerifierAddress || !isAddress(publicVerifierAddress) ||
 }
 
 if (SERVER_ARC_NETWORK_CONFIG.name === "mainnet") {
-  const serverAddress = process.env.ARC_MAINNET_ESCROW_ADDRESS;
-  if (!serverAddress || !isAddress(serverAddress) ||
-      serverAddress.toLowerCase() !== DO_IT_ESCROW_ADDRESS.toLowerCase()) {
+  const serverAddress = requireMainnetDeploymentAddress(
+    process.env.ARC_MAINNET_ESCROW_ADDRESS,
+    ARC_TESTNET_ESCROW_ADDRESS,
+    "escrow",
+  );
+  if (serverAddress.toLowerCase() !== DO_IT_ESCROW_ADDRESS.toLowerCase()) {
     throw new Error(
       "ARC_MAINNET_ESCROW_ADDRESS must be valid and match NEXT_PUBLIC_ARC_MAINNET_ESCROW_ADDRESS.",
     );
   }
-  assertNotTestnetDeploymentAddress(
-    network,
-    serverAddress,
-    ARC_TESTNET_ESCROW_ADDRESS,
-    "escrow",
-  );
   if (!process.env.ARC_MAINNET_DEPLOYMENT_BLOCK ||
       !/^\d+$/.test(process.env.ARC_MAINNET_DEPLOYMENT_BLOCK)) {
     throw new Error(

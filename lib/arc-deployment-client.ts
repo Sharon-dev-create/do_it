@@ -6,7 +6,7 @@ import {
   ARC_NETWORK_CONFIG,
   ARC_TESTNET_VERIFIER_ADDRESS,
   assertArcChainId,
-  assertNotTestnetDeploymentAddress,
+  requireMainnetDeploymentAddress,
   assertRuntimeCodeHash,
 } from "@/lib/arc-network";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
@@ -24,17 +24,15 @@ export async function assertClientArcEscrowDeployment(
   }
 
   const expectedVerifier = ARC_NETWORK_CONFIG.name === "mainnet"
-    ? process.env.NEXT_PUBLIC_ARC_MAINNET_VERIFIER_ADDRESS
+    ? requireMainnetDeploymentAddress(
+        process.env.NEXT_PUBLIC_ARC_MAINNET_VERIFIER_ADDRESS,
+        ARC_TESTNET_VERIFIER_ADDRESS,
+        "verifier",
+      )
     : process.env.NEXT_PUBLIC_ARC_TESTNET_VERIFIER_ADDRESS || ARC_TESTNET_VERIFIER_ADDRESS;
   if (!expectedVerifier || !isAddress(expectedVerifier)) {
     throw new Error(`The ${ARC_NETWORK_CONFIG.label} verifier address is not configured.`);
   }
-  assertNotTestnetDeploymentAddress(
-    ARC_NETWORK_CONFIG.name,
-    expectedVerifier,
-    ARC_TESTNET_VERIFIER_ADDRESS,
-    "verifier",
-  );
   const [tokenAddress, verifierAddress, tokenDecimals] = await Promise.all([
     publicClient.readContract({
       address: DO_IT_ESCROW_ADDRESS,
