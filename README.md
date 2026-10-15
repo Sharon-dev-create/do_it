@@ -4,13 +4,13 @@
 
 Do-It is an application prototype for publishing small digital tasks, collecting worker submissions, and coordinating rewards through Circle Gateway or an Arc escrow contract.
 
-> **Project status:** Arc Testnet remains available for development. Arc Mainnet configuration is fail-closed and V2 transactions require a separately audited deployment, matching runtime code hash, verified verifier configuration, and explicit Mainnet RPC configuration. Circle's Gateway documentation supports Mainnet Arc, but the installed SDK 2.0.4 does not expose its `arc` chain; Gateway paths remain disabled until that SDK integration is upgraded and validated. V2 worker submission restrictions are application-level only and are not enforced by the escrow contract.
+> **Project status:** Arc Testnet remains available for development. Direct Mainnet Gateway V1 payouts, balance lookup, and x402 settlement are implemented with Circle SDK 3.5.0 but have not been tested with real funds. Mainnet Gateway withdrawals remain disabled, and V2 transactions require a separately audited deployment, matching runtime code hash, verified verifier configuration, and explicit Mainnet RPC configuration. V2 worker submission restrictions are application-level only and are not enforced by the escrow contract.
 
 ## Overview
 
 Small online tasks can be awkward to coordinate: creators need a way to describe and verify work, while contributors need clear reward terms and a workable way to get paid. Manual review and conventional payment rails can add friction, especially for low-value work.
 
-Do-It explores a task economy where creators publish work, contributors submit answers, and accepted work can trigger USDC settlement. Circle Gateway supports the project's testnet payment flows; Arc provides the EVM network used by the V2 escrow implementation. Circle Gateway and Arc are integrations used by Do-It, not protocols created by this project.
+Do-It explores a task economy where creators publish work, contributors submit answers, and accepted work can trigger USDC settlement. Circle Gateway supports the project's direct payment flows on Testnet and Mainnet; Arc provides the EVM network used by Gateway and the V2 escrow implementation. Circle Gateway and Arc are integrations used by Do-It, not protocols created by this project.
 
 The app is intended for task creators, workers, and developers exploring small-value payment flows. Example app uses include simple research, content checks, data labeling, and paid API demonstrations.
 
