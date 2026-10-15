@@ -1,7 +1,14 @@
 import { payWorker } from "@/lib/payout";
 import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  getWorkerAddressFromSessionToken,
+  WORKER_SESSION_COOKIE,
+} from "@/lib/worker-session-auth";
+import { isAuthorizedGatewayPaymentRetry } from "@/lib/payment-retry-policy";
+import { getV1GatewayPayoutUnavailableMessage } from "@/lib/v1-payout-policy";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,7 +20,31 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const payoutUnavailable = getV1GatewayPayoutUnavailableMessage(
+      ARC_NETWORK_CONFIG.name,
+    );
+    if (payoutUnavailable) {
+      return NextResponse.json({ error: payoutUnavailable }, { status: 503 });
+    }
+
+    const origin = request.headers.get("origin");
+    if (origin && origin !== new URL(request.url).origin) {
+      return NextResponse.json({ error: "Request origin is invalid" }, { status: 403 });
+    }
+
     const { id } = await params;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      return NextResponse.json({ error: "Invalid payment ID" }, { status: 400 });
+    }
+
+    const cookieStore = await cookies();
+    const sessionWallet = getWorkerAddressFromSessionToken(
+      cookieStore.get(WORKER_SESSION_COOKIE)?.value,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+    );
+    if (!sessionWallet) {
+      return NextResponse.json({ error: "Authorize the worker wallet before retrying a payment" }, { status: 401 });
+    }
 
     // 1. Find the payment
     const { data: payment, error: paymentError } = await supabase
@@ -27,6 +58,12 @@ export async function POST(
         { error: "Payment not found" },
         { status: 404 },
       );
+    }
+    if (
+      typeof payment.worker_address !== "string" ||
+      sessionWallet !== payment.worker_address.toLowerCase()
+    ) {
+      return NextResponse.json({ error: "Only the payment recipient may retry this payout" }, { status: 403 });
     }
 
     // V2 credits are accounting entries in the escrow, never Gateway transfers.
@@ -49,7 +86,7 @@ export async function POST(
     // 3. Make sure the task is still completed
     const { data: task, error: taskError } = await supabase
       .from("tasks")
-      .select("id, status, reward_usdc, contract_version")
+      .select("id, created_by, status, reward_usdc, contract_version")
       .eq("id", payment.task_id)
       .single();
 
@@ -61,6 +98,23 @@ export async function POST(
     }
     if (task.contract_version === "v2") {
       return NextResponse.json({ error: "V2 tasks cannot be paid or retried through Circle Gateway" }, { status: 409 });
+    }
+    const { data: submission, error: submissionError } = payment.submission_id
+      ? await supabase
+          .from("submissions")
+          .select("id, task_id, worker_address, is_correct, status")
+          .eq("id", payment.submission_id)
+          .maybeSingle()
+      : { data: null, error: null };
+    if (submissionError) {
+      console.error("Payment retry submission lookup failed:", submissionError.code);
+      return NextResponse.json({ error: "Unable to verify the payment submission" }, { status: 503 });
+    }
+    if (!isAuthorizedGatewayPaymentRetry(payment, task, submission)) {
+      return NextResponse.json(
+        { error: "Payment does not match a completed, approved V1 submission and its authorized reward" },
+        { status: 409 },
+      );
     }
     // A historical hash means an earlier attempt may have been broadcast; never resend it.
     if (payment.tx_hash) {
@@ -84,8 +138,9 @@ export async function POST(
       })
       .eq("id", payment.id)
       .eq("status", "failed")
+      .is("tx_hash", null)
       .select()
-      .single();
+      .maybeSingle();
 
     if (retryError || !retryPayment) {
       return NextResponse.json(
@@ -103,17 +158,19 @@ export async function POST(
         String(payment.amount_usdc),
         payment.worker_address as `0x${string}`,
         async (txHash) => {
-          const { error } = await supabase
+          const { data: submitted, error } = await supabase
             .from("task_payments")
             .update({
               status: "submitted",
               tx_hash: txHash,
             })
             .eq("id", payment.id)
-            .eq("status", "pending");
+            .eq("status", "pending")
+            .select("id")
+            .maybeSingle();
 
-          if (error) {
-            throw error;
+          if (error || !submitted) {
+            throw error ?? new Error("Payment state changed before the submitted transaction was recorded.");
           }
         },
       );

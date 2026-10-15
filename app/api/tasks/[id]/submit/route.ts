@@ -9,6 +9,7 @@ import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 import { assertGatewayAvailable } from "@/lib/arc-network-server";
 import { getTaskCreatorSubmissionError } from "@/lib/submission-auth";
 import { getMatchingWorkerSessionAddress, WORKER_SESSION_COOKIE } from "@/lib/worker-session-auth";
+import { getV1GatewayPayoutUnavailableMessage } from "@/lib/v1-payout-policy";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -126,6 +127,12 @@ async function submitV2(task: V2TaskRecord, taskId: string, worker: string, answ
 }
 
 async function submitV1(task: Record<string, any>, worker: string, answer: string) {
+  const payoutUnavailable = getV1GatewayPayoutUnavailableMessage(
+    ARC_NETWORK_CONFIG.name,
+  );
+  if (payoutUnavailable) {
+    return NextResponse.json({ error: payoutUnavailable }, { status: 503 });
+  }
   try { assertGatewayAvailable(); }
   catch { return NextResponse.json({ error: "Circle Gateway is unavailable for the selected Arc network." }, { status: 503 }); }
   if (task.status !== "open") return NextResponse.json({ error: "Task is no longer open" }, { status: 409 });
@@ -153,10 +160,22 @@ async function submitV1(task: Record<string, any>, worker: string, answer: strin
   if (paymentError) return NextResponse.json({ error: "Task completed but payment record creation failed" }, { status: 500 });
   try {
     const payout = await payWorker(String(task.reward_usdc), worker as `0x${string}`, async (hash) => {
-      const { error } = await supabase.from("task_payments").update({ status: "submitted", tx_hash: hash }).eq("id", payment.id).eq("status", "pending");
-      if (error) throw error;
+      const { data: submitted, error } = await supabase.from("task_payments").update({ status: "submitted", tx_hash: hash }).eq("id", payment.id).eq("status", "pending").select("id").maybeSingle();
+      if (error || !submitted) throw error ?? new Error("Payment state changed before the submitted transaction was recorded.");
     });
-    const { data: confirmed } = await supabase.from("task_payments").update({ status: "confirmed", tx_hash: payout.mintTxHash, completed_at: time() }).eq("id", payment.id).eq("status", "submitted").select().maybeSingle();
+    const { data: confirmed, error: confirmError } = await supabase.from("task_payments").update({ status: "confirmed", tx_hash: payout.mintTxHash, completed_at: time() }).eq("id", payment.id).eq("status", "submitted").select().maybeSingle();
+    if (confirmError || !confirmed) {
+      console.error("Gateway payout confirmed but payment record needs reconciliation:", {
+        paymentId: payment.id,
+        txHash: payout.mintTxHash,
+        error: confirmError?.message,
+      });
+      return NextResponse.json({
+        error: "Gateway payment was confirmed but its record needs reconciliation",
+        txHash: payout.mintTxHash,
+        requiresReconciliation: true,
+      }, { status: 502 });
+    }
     return NextResponse.json({ submission, correct: true, message: "V1 Gateway payout completed", payment: confirmed, txHash: payout.mintTxHash });
   } catch (error) {
     const txHash = error && typeof error === "object" && "txHash" in error && typeof error.txHash === "string" ? error.txHash : null;

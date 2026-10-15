@@ -16,12 +16,17 @@ import {
   getGatewaySellerCredentials,
   hasArcMainnetMintLog,
 } from "@/lib/gateway-network";
+import { getV1GatewayPayoutUnavailableMessage } from "@/lib/v1-payout-policy";
 
 export async function payWorker(
   amount: string,
   workerAddress: `0x${string}`,
   onSubmitted?: (txHash: `0x${string}`) => Promise<void>,
 ) {
+  const payoutUnavailable = getV1GatewayPayoutUnavailableMessage(
+    SERVER_ARC_NETWORK_CONFIG.name,
+  );
+  if (payoutUnavailable) throw new Error(payoutUnavailable);
   assertGatewayNetwork(SERVER_ARC_NETWORK_CONFIG.name);
   assertGatewayAvailable();
   console.info("PAYOUT: started");

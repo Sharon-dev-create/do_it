@@ -196,7 +196,21 @@ export function withGateway(
       });
 
       if (error) {
-        console.error("Failed to record payment event:", error.message);
+        console.error("Gateway settled payment could not be recorded:", {
+          endpoint,
+          network: requirements.network,
+          transaction: settleResult.transaction,
+          paymentEventError: error.message,
+        });
+        return NextResponse.json(
+          {
+            error: "Payment settled, but the receipt could not be recorded. Do not submit a new payment; contact support with the transaction hash.",
+            settled: true,
+            transaction: settleResult.transaction,
+            network: requirements.network,
+          },
+          { status: 503, headers: { "Cache-Control": "no-store" } },
+        );
       }
 
       console.log(
