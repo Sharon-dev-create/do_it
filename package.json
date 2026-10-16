@@ -6,6 +6,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "reconcile:x402": "node --experimental-transform-types --no-warnings scripts/reconcile-x402.mts",
     "generate-wallets": "node --experimental-transform-types --no-warnings generate-wallets.mts",
     "agent": "node --experimental-transform-types --no-warnings --env-file=.env.local agent.mts"
   },
