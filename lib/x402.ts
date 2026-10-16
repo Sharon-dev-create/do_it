@@ -18,6 +18,7 @@
 
 import { BatchFacilitatorClient } from "@circle-fin/x402-batching/server";
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 import { connection, NextRequest, NextResponse } from "next/server";
 import { assertGatewayAvailable, SERVER_ARC_NETWORK_CONFIG } from "@/lib/arc-network-server";
 import { assertPaymentNetwork } from "@/lib/arc-network";
@@ -236,6 +237,11 @@ export function withGateway(
           { status: 503 },
         );
       }
+      const requestHash = createHash("sha256")
+        .update(req.method)
+        .update("\n")
+        .update(Buffer.from(await req.clone().arrayBuffer()))
+        .digest("hex");
 
       const { data: existingIntentData, error: existingIntentError } = await supabase.rpc(
         "get_x402_payment_intent",
@@ -271,7 +277,8 @@ export function withGateway(
           existingIntent.token.toLowerCase() === requirements.asset.toLowerCase() &&
           String(existingIntent.amount_base_units) === requirements.amount &&
           existingIntent.authorization_nonce.toLowerCase() === authorization.nonce.toLowerCase() &&
-          existingIntent.endpoint === endpoint;
+          existingIntent.endpoint === endpoint &&
+          existingIntent.request_hash === requestHash;
         if (!sameContext) {
           return NextResponse.json(
             { error: "This authorization is already bound to different payment requirements." },
@@ -365,6 +372,7 @@ export function withGateway(
             p_amount_base_units: requirements.amount,
             p_authorization_nonce: authorization.nonce,
             p_endpoint: endpoint,
+            p_request_hash: requestHash,
           });
           if (error) throw new Error("Unable to prepare durable x402 payment intent.");
           return asPreparedIntent(data);

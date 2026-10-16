@@ -26,6 +26,12 @@ function isNetwork(value: string): value is Network {
 }
 
 async function main() {
+  if (process.argv.slice(2).includes("--help")) {
+    console.log(
+      "Read-only x402 lookup: npm run reconcile:x402 -- --network=testnet|mainnet --nonce=0x... --payer=0x... --recipient=0x... --token-address=0x... --domain-id=26 --amount-base-units=123 [--transfer-id=uuid]",
+    );
+    return;
+  }
   const args = parseArgs(process.argv.slice(2));
   const network = required(args, "network");
   if (!isNetwork(network)) throw new Error("--network must be testnet or mainnet.");
