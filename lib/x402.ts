@@ -29,6 +29,8 @@ import {
   gatewayRequirementsMatch,
 } from "@/lib/gateway-network";
 import { isAddress, parseUnits } from "viem";
+import { formatUnits } from "viem";
+import { executeX402PaymentFlow, type X402Intent, type X402SettlementResult } from "@/lib/x402-payment-flow";
 
 const facilitator = new BatchFacilitatorClient({
   url: getGatewayFacilitatorUrl(SERVER_ARC_NETWORK_CONFIG.name),
@@ -45,6 +47,67 @@ interface PaymentPayload {
   accepted?: Record<string, unknown>;
   payload: Record<string, unknown>;
   extensions?: Record<string, unknown>;
+}
+
+interface AuthorizationPayload {
+  from: string;
+  to: string;
+  value: string;
+  nonce: string;
+}
+
+interface PreparedIntentRow {
+  intent_id: string;
+  intent_status: X402Intent["status"];
+  response_status: number | null;
+  response_body: unknown | null;
+  provider_transfer_id: string | null;
+  provider_status: string | null;
+}
+
+function asPreparedIntent(data: unknown): X402Intent {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== "object") {
+    throw new Error("x402 intent preparation returned no row.");
+  }
+  const value = row as PreparedIntentRow;
+  if (
+    typeof value.intent_id !== "string" ||
+    typeof value.intent_status !== "string"
+  ) {
+    throw new Error("x402 intent preparation returned an invalid row.");
+  }
+  return {
+    id: value.intent_id,
+    status: value.intent_status,
+    response_status: value.response_status,
+    response_body: value.response_body,
+    provider_transfer_id: value.provider_transfer_id,
+    provider_status: value.provider_status,
+  };
+}
+
+function getAuthorization(paymentPayload: PaymentPayload): AuthorizationPayload | null {
+  const authorization = paymentPayload.payload?.authorization;
+  if (!authorization || typeof authorization !== "object") return null;
+  const value = authorization as Record<string, unknown>;
+  if (
+    typeof value.from !== "string" ||
+    typeof value.to !== "string" ||
+    typeof value.value !== "string" ||
+    typeof value.nonce !== "string" ||
+    !/^0x[0-9a-fA-F]{64}$/.test(value.nonce) ||
+    !isAddress(value.from) ||
+    !isAddress(value.to)
+  ) {
+    return null;
+  }
+  return {
+    from: value.from,
+    to: value.to,
+    value: value.value,
+    nonce: value.nonce,
+  };
 }
 
 function buildPaymentRequirements(
@@ -136,6 +199,14 @@ export function withGateway(
         );
       }
 
+      const authorization = getAuthorization(paymentPayload);
+      if (!authorization) {
+        return NextResponse.json(
+          { error: "Payment authorization is malformed." },
+          { status: 402 },
+        );
+      }
+
       const verifyResult = await facilitator.verify(
         paymentPayload,
         requirements,
@@ -151,86 +222,141 @@ export function withGateway(
         );
       }
 
-      const settleResult = await facilitator.settle(
-        paymentPayload,
-        requirements,
-      );
-
+      const expectedAmount = BigInt(requirements.amount);
       if (
-        !settleResult.success ||
-        settleResult.network !== requirements.network ||
-        typeof settleResult.transaction !== "string" ||
-        !settleResult.transaction
+        BigInt(authorization.value) !== expectedAmount ||
+        authorization.to.toLowerCase() !== requirements.payTo.toLowerCase() ||
+        (verifyResult.payer &&
+          authorization.from.toLowerCase() !== verifyResult.payer.toLowerCase())
       ) {
-        console.error(
-          `[x402] Settlement failed for ${endpoint}: ${settleResult.errorReason}`,
-        );
         return NextResponse.json(
-          {
-            error: "Payment settlement failed",
-            reason: settleResult.errorReason,
-          },
+          { error: "Payment authorization does not match its verified payer, recipient, or amount." },
           { status: 402 },
         );
       }
 
-      // Record payment event in Supabase
-      const amountUsdc = (
-        Number(requirements.amount) / 1e6
-      ).toString();
-      const payer = settleResult.payer ?? verifyResult.payer ?? "unknown";
-      if (!isAddress(payer)) {
+      const payer = verifyResult.payer ?? authorization.from;
+      if (!isAddress(payer) || payer.toLowerCase() !== authorization.from.toLowerCase()) {
         return NextResponse.json(
-          { error: "Circle Gateway returned an invalid payment payer address." },
-          { status: 502 },
+          { error: "Circle Gateway did not verify the authorization payer." },
+          { status: 402 },
         );
       }
 
-      const { error } = await supabase.from("payment_events").insert({
-        endpoint,
-        payer,
-        amount_usdc: amountUsdc,
-        network: requirements.network,
-        gateway_tx: settleResult.transaction ?? null,
-        raw: { requirements, settleResult },
+      const chainConfig = getGatewayChainConfig(SERVER_ARC_NETWORK_CONFIG.name);
+      const verifyingContract = requirements.extra.verifyingContract;
+      if (typeof verifyingContract !== "string" || !isAddress(verifyingContract)) {
+        return NextResponse.json(
+          { error: "Circle Gateway returned invalid authorization domain configuration." },
+          { status: 503 },
+        );
+      }
+
+      const flow = await executeX402PaymentFlow({
+        expectedNetwork: requirements.network,
+        expectedPayer: payer,
+        createPaymentResponse: (transferId) =>
+          Buffer.from(JSON.stringify({
+            success: true,
+            transaction: transferId,
+            network: requirements.network,
+            payer,
+          })).toString("base64"),
+        prepare: async () => {
+          const { data, error } = await supabase.rpc("prepare_x402_payment_intent", {
+            p_network: requirements.network,
+            p_domain_id: chainConfig.domain,
+            p_verifying_contract: verifyingContract,
+            p_payer: payer,
+            p_recipient: requirements.payTo,
+            p_token: requirements.asset,
+            p_amount_base_units: requirements.amount,
+            p_authorization_nonce: authorization.nonce,
+            p_endpoint: endpoint,
+          });
+          if (error) throw new Error("Unable to prepare durable x402 payment intent.");
+          return asPreparedIntent(data);
+        },
+        claim: async (intentId) => {
+          const { data, error } = await supabase.rpc("claim_x402_payment_intent", {
+            p_intent_id: intentId,
+          });
+          if (error) throw new Error("Unable to claim x402 payment intent.");
+          const row = Array.isArray(data) ? data[0] : data;
+          if (!row || typeof row !== "object") {
+            throw new Error("x402 payment intent claim returned no state.");
+          }
+          const claim = row as { claimed: boolean; intent_status: X402Intent["status"] };
+          return { claimed: claim.claimed, status: claim.intent_status };
+        },
+        settle: async () => {
+          const result = await facilitator.settle(paymentPayload, requirements);
+          return {
+            success: result.success,
+            network: result.network,
+            transaction: result.transaction,
+            payer: result.payer ?? payer,
+            errorReason: result.errorReason,
+          } satisfies X402SettlementResult;
+        },
+        markRecoveryPending: async (intentId, errorCode) => {
+          const { error } = await supabase.rpc("mark_x402_payment_recovery_pending", {
+            p_intent_id: intentId,
+            p_error_code: errorCode,
+          });
+          if (error) throw new Error("Unable to persist x402 recovery state.");
+        },
+        recordProviderAcceptance: async (intentId, transferId) => {
+          const { error } = await supabase.rpc("record_x402_provider_acceptance", {
+            p_intent_id: intentId,
+            p_provider_transfer_id: transferId,
+            p_provider_status: null,
+          });
+          if (error) throw new Error("Unable to persist Circle x402 acceptance.");
+        },
+        buildResponse: async () => {
+          const response = await handler(req);
+          return {
+            status: response.status,
+            body: await response.clone().json(),
+          };
+        },
+        saveResponse: async (intentId, status, body) => {
+          const { data, error } = await supabase.rpc("save_x402_payment_response", {
+            p_intent_id: intentId,
+            p_response_status: status,
+            p_response_body: body,
+          });
+          if (error) throw new Error("Unable to persist x402 response.");
+          const row = Array.isArray(data) ? data[0] : data;
+          if (!row || typeof row !== "object") {
+            throw new Error("x402 response persistence returned no row.");
+          }
+          const saved = row as { response_status: number; response_body: unknown };
+          return { status: saved.response_status, body: saved.response_body };
+        },
+        onRecoveryStateWriteFailure: (intentId, errorCode) => {
+          console.error("x402 recovery state could not be persisted:", {
+            intentId,
+            errorCode,
+          });
+        },
       });
 
-      if (error) {
-        console.error("Gateway settled payment could not be recorded:", {
-          endpoint,
-          network: requirements.network,
-          transaction: settleResult.transaction,
-          paymentEventError: error.message,
-        });
+      if (flow.kind === "pending") {
         return NextResponse.json(
           {
-            error: "Payment settled, but the receipt could not be recorded. Do not submit a new payment; contact support with the transaction hash.",
-            settled: true,
-            transaction: settleResult.transaction,
-            network: requirements.network,
+            error: "Payment processing is unresolved. Do not submit a new payment authorization.",
+            status: flow.status,
           },
           { status: 503, headers: { "Cache-Control": "no-store" } },
         );
       }
 
-      console.log(
-        `[x402] Payment settled: ${endpoint} — ${amountUsdc} USDC from ${payer}`,
-      );
-
-      // Call the actual route handler
-      const response = await handler(req);
-
-      // Forward settlement info to the client
-      const settleResponseHeader = Buffer.from(
-        JSON.stringify({
-          success: true,
-          transaction: settleResult.transaction,
-          network: requirements.network,
-          payer,
-        }),
-      ).toString("base64");
-
-      response.headers.set("PAYMENT-RESPONSE", settleResponseHeader);
+      const response = NextResponse.json(flow.response.body, {
+        status: flow.response.status,
+      });
+      response.headers.set("PAYMENT-RESPONSE", flow.response.paymentResponse);
       return response;
     } catch (error) {
       const message =
