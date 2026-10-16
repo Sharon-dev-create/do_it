@@ -209,21 +209,6 @@ export function withGateway(
         );
       }
 
-      const verifyResult = await facilitator.verify(
-        paymentPayload,
-        requirements,
-      );
-
-      if (!verifyResult.isValid) {
-        return NextResponse.json(
-          {
-            error: "Payment verification failed",
-            reason: verifyResult.invalidReason,
-          },
-          { status: 402 },
-        );
-      }
-
       if (!/^[0-9]+$/.test(authorization.value)) {
         return NextResponse.json(
           { error: "Payment authorization amount is malformed." },
@@ -233,23 +218,15 @@ export function withGateway(
       const expectedAmount = BigInt(requirements.amount);
       if (
         BigInt(authorization.value) !== expectedAmount ||
-        authorization.to.toLowerCase() !== requirements.payTo.toLowerCase() ||
-        (verifyResult.payer &&
-          authorization.from.toLowerCase() !== verifyResult.payer.toLowerCase())
+        authorization.to.toLowerCase() !== requirements.payTo.toLowerCase()
       ) {
         return NextResponse.json(
-          { error: "Payment authorization does not match its verified payer, recipient, or amount." },
+          { error: "Payment authorization does not match its required recipient or amount." },
           { status: 402 },
         );
       }
 
-      const payer = verifyResult.payer ?? authorization.from;
-      if (!isAddress(payer) || payer.toLowerCase() !== authorization.from.toLowerCase()) {
-        return NextResponse.json(
-          { error: "Circle Gateway did not verify the authorization payer." },
-          { status: 402 },
-        );
-      }
+      const payer = authorization.from;
 
       const chainConfig = getGatewayChainConfig(SERVER_ARC_NETWORK_CONFIG.name);
       const verifyingContract = requirements.extra.verifyingContract;
@@ -258,6 +235,109 @@ export function withGateway(
           { error: "Circle Gateway returned invalid authorization domain configuration." },
           { status: 503 },
         );
+      }
+
+      const { data: existingIntent, error: existingIntentError } = await supabase
+        .from("x402_payment_intents")
+        .select("id, network, domain_id, verifying_contract, payer, recipient, token, amount_base_units, authorization_nonce, endpoint, status, provider_transfer_id, response_status, response_body")
+        .eq("network", requirements.network)
+        .eq("domain_id", chainConfig.domain)
+        .eq("verifying_contract", verifyingContract.toLowerCase())
+        .eq("payer", payer.toLowerCase())
+        .eq("authorization_nonce", authorization.nonce.toLowerCase())
+        .maybeSingle();
+      if (existingIntentError) {
+        console.error("x402 intent lookup failed:", {
+          endpoint,
+          code: existingIntentError.code,
+        });
+        return NextResponse.json(
+          { error: "Unable to determine the existing payment state. Do not resubmit the authorization." },
+          { status: 503, headers: { "Cache-Control": "no-store" } },
+        );
+      }
+
+      if (existingIntent) {
+        const sameContext =
+          existingIntent.network === requirements.network &&
+          existingIntent.domain_id === chainConfig.domain &&
+          existingIntent.verifying_contract.toLowerCase() === verifyingContract.toLowerCase() &&
+          existingIntent.payer.toLowerCase() === payer.toLowerCase() &&
+          existingIntent.recipient.toLowerCase() === requirements.payTo.toLowerCase() &&
+          existingIntent.token.toLowerCase() === requirements.asset.toLowerCase() &&
+          String(existingIntent.amount_base_units) === requirements.amount &&
+          existingIntent.authorization_nonce.toLowerCase() === authorization.nonce.toLowerCase() &&
+          existingIntent.endpoint === endpoint;
+        if (!sameContext) {
+          return NextResponse.json(
+            { error: "This authorization is already bound to different payment requirements." },
+            { status: 402 },
+          );
+        }
+        if (existingIntent.status === "response_ready") {
+          if (
+            !existingIntent.provider_transfer_id ||
+            typeof existingIntent.response_status !== "number" ||
+            existingIntent.response_body === null
+          ) {
+            return NextResponse.json(
+              { error: "Recorded payment response requires operator review." },
+              { status: 503, headers: { "Cache-Control": "no-store" } },
+            );
+          }
+          const response = NextResponse.json(existingIntent.response_body, {
+            status: existingIntent.response_status,
+          });
+          response.headers.set(
+            "PAYMENT-RESPONSE",
+            Buffer.from(JSON.stringify({
+              success: true,
+              transaction: existingIntent.provider_transfer_id,
+              network: requirements.network,
+              payer,
+            })).toString("base64"),
+          );
+          return response;
+        }
+        if (
+          existingIntent.status !== "verified" &&
+          existingIntent.status !== "provider_accepted"
+        ) {
+          return NextResponse.json(
+            {
+              error: "Payment processing is unresolved. Do not submit a new payment authorization.",
+              status: existingIntent.status,
+            },
+            { status: 503, headers: { "Cache-Control": "no-store" } },
+          );
+        }
+      }
+
+      if (!existingIntent || existingIntent.status === "verified") {
+        const verifyResult = await facilitator.verify(
+          paymentPayload,
+          requirements,
+        );
+
+        if (!verifyResult.isValid) {
+          return NextResponse.json(
+            {
+              error: "Payment verification failed",
+              reason: verifyResult.invalidReason,
+            },
+            { status: 402 },
+          );
+        }
+        if (
+          verifyResult.payer &&
+          (!isAddress(verifyResult.payer) ||
+            verifyResult.payer.toLowerCase() !== payer.toLowerCase())
+        ) {
+          return NextResponse.json(
+            { error: "Circle Gateway verified a different authorization payer." },
+            { status: 402 },
+          );
+        }
       }
 
       const flow = await executeX402PaymentFlow({
