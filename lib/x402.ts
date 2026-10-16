@@ -29,7 +29,6 @@ import {
   gatewayRequirementsMatch,
 } from "@/lib/gateway-network";
 import { isAddress, parseUnits } from "viem";
-import { formatUnits } from "viem";
 import { executeX402PaymentFlow, type X402Intent, type X402SettlementResult } from "@/lib/x402-payment-flow";
 
 const facilitator = new BatchFacilitatorClient({
@@ -151,8 +150,11 @@ export function withGateway(
       requirements = buildPaymentRequirements(price, extra);
       assertPaymentNetwork(SERVER_ARC_NETWORK_CONFIG.name, requirements.network);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error("[x402] Gateway configuration/support check failed:", message);
+      const errorName = error instanceof Error ? error.name : "UnknownError";
+      console.error("[x402] Gateway configuration/support check failed:", {
+        endpoint,
+        errorName,
+      });
       return NextResponse.json(
         { error: "Circle Gateway does not currently support the configured Arc payment path." },
         { status: 503 },
@@ -222,6 +224,12 @@ export function withGateway(
         );
       }
 
+      if (!/^[0-9]+$/.test(authorization.value)) {
+        return NextResponse.json(
+          { error: "Payment authorization amount is malformed." },
+          { status: 402 },
+        );
+      }
       const expectedAmount = BigInt(requirements.amount);
       if (
         BigInt(authorization.value) !== expectedAmount ||
@@ -359,11 +367,10 @@ export function withGateway(
       response.headers.set("PAYMENT-RESPONSE", flow.response.paymentResponse);
       return response;
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : String(error);
-      console.error("[x402] Payment processing error:", message);
+      const errorName = error instanceof Error ? error.name : "UnknownError";
+      console.error("[x402] Payment processing failed:", { endpoint, errorName });
       return NextResponse.json(
-        { error: "Payment processing error", message },
+        { error: "Payment processing failed. The payment state may require reconciliation." },
         { status: 500 },
       );
     }

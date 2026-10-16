@@ -1,6 +1,7 @@
 import { GatewayClient, type TransferResponse } from "@circle-fin/x402-batching/client";
 import { generatePrivateKey } from "viem/accounts";
-import { assessX402TransferEvidence } from "../lib/x402-reconciliation.ts";
+import { isAddress } from "viem";
+import { assessX402TransferEvidence, lookupX402Transfers } from "../lib/x402-reconciliation.ts";
 
 type Network = "testnet" | "mainnet";
 
@@ -32,6 +33,12 @@ async function main() {
   if (!/^0x[0-9a-fA-F]{64}$/.test(nonce)) throw new Error("--nonce must be a bytes32 hex value.");
   const payer = required(args, "payer");
   const recipient = required(args, "recipient");
+  const tokenAddress = required(args, "token-address");
+  const domainId = required(args, "domain-id");
+  if (!isAddress(payer) || !isAddress(recipient) || !isAddress(tokenAddress)) {
+    throw new Error("--payer, --recipient, and --token-address must be valid addresses.");
+  }
+  if (!/^[0-9]+$/.test(domainId)) throw new Error("--domain-id must be a non-negative integer.");
   const amountBaseUnits = required(args, "amount-base-units");
   if (!/^[1-9][0-9]*$/.test(amountBaseUnits)) {
     throw new Error("--amount-base-units must be a positive integer.");
@@ -44,36 +51,14 @@ async function main() {
     privateKey: generatePrivateKey(),
   });
 
-  let transfers: TransferResponse[];
-  if (args["transfer-id"]) {
-    transfers = [await client.getTransferById(args["transfer-id"])];
-  } else {
-    transfers = [];
-    let pageAfter: string | undefined;
-    for (let page = 0; page < 10; page += 1) {
-      const result = await client.searchTransfers({
-        network: networkId,
-        nonce: nonce as `0x${string}`,
-        from: payer as `0x${string}`,
-        to: recipient as `0x${string}`,
-        token: "USDC",
-        pageSize: 100,
-        ...(pageAfter ? { pageAfter } : {}),
-      });
-      transfers.push(...result.transfers);
-      pageAfter = result.pagination?.pageAfter;
-      if (!pageAfter) break;
-      if (page === 9) {
-        console.log(JSON.stringify({
-          outcome: "unresolved",
-          reason: "pagination_limit_reached",
-          returned: transfers.length,
-        }, null, 2));
-        process.exitCode = 2;
-        return;
-      }
-    }
-  }
+  const lookup = await lookupX402Transfers(client, {
+    network: networkId,
+    nonce: nonce as `0x${string}`,
+    payer: payer as `0x${string}`,
+    recipient: recipient as `0x${string}`,
+    ...(args["transfer-id"] ? { transferId: args["transfer-id"] } : {}),
+  });
+  const transfers = lookup.transfers as TransferResponse[];
 
   const assessed = transfers.map((transfer) => ({
     transfer: {
@@ -100,13 +85,19 @@ async function main() {
       ? "candidate_requires_operator_review"
       : "unresolved",
     network: networkId,
+    expectedGatewayDomain: Number(domainId),
+    expectedTokenAddress: tokenAddress,
     nonceWasUsedAsSearchFilter: !args["transfer-id"],
     nonceReturnedInTransferRecord: false,
     gatewayDomainReturnedInTransferRecord: false,
     tokenAddressReturnedInTransferRecord: false,
+    lookupComplete: lookup.complete,
+    warning: "This report is read-only. Provider lookup data is a candidate, not authority to mark an intent paid or replay settlement.",
     transfers: assessed,
   }, null, 2));
-  if (candidates.length !== 1 || mismatched.length > 0) process.exitCode = 2;
+  if (!lookup.complete || candidates.length !== 1 || mismatched.length > 0) {
+    process.exitCode = 2;
+  }
 }
 
 main().catch((error: unknown) => {
