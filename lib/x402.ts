@@ -237,15 +237,16 @@ export function withGateway(
         );
       }
 
-      const { data: existingIntent, error: existingIntentError } = await supabase
-        .from("x402_payment_intents")
-        .select("id, network, domain_id, verifying_contract, payer, recipient, token, amount_base_units, authorization_nonce, endpoint, status, provider_transfer_id, response_status, response_body")
-        .eq("network", requirements.network)
-        .eq("domain_id", chainConfig.domain)
-        .eq("verifying_contract", verifyingContract.toLowerCase())
-        .eq("payer", payer.toLowerCase())
-        .eq("authorization_nonce", authorization.nonce.toLowerCase())
-        .maybeSingle();
+      const { data: existingIntentData, error: existingIntentError } = await supabase.rpc(
+        "get_x402_payment_intent",
+        {
+          p_network: requirements.network,
+          p_domain_id: chainConfig.domain,
+          p_verifying_contract: verifyingContract,
+          p_payer: payer,
+          p_authorization_nonce: authorization.nonce,
+        },
+      );
       if (existingIntentError) {
         console.error("x402 intent lookup failed:", {
           endpoint,
@@ -256,6 +257,9 @@ export function withGateway(
           { status: 503, headers: { "Cache-Control": "no-store" } },
         );
       }
+      const existingIntent = Array.isArray(existingIntentData)
+        ? existingIntentData[0]
+        : null;
 
       if (existingIntent) {
         const sameContext =

@@ -39,22 +39,71 @@ create table public.x402_payment_intents (
 
 alter table public.x402_payment_intents enable row level security;
 revoke all privileges on table public.x402_payment_intents
-  from public, anon, authenticated;
-grant select, insert, update on table public.x402_payment_intents to service_role;
+  from public, anon, authenticated, service_role;
 
 alter table public.payment_events
   add column intent_id uuid references public.x402_payment_intents(id);
 create unique index payment_events_intent_id_unique
   on public.payment_events(intent_id)
   where intent_id is not null;
-create unique index payment_events_network_gateway_tx_unique
-  on public.payment_events(network, gateway_tx)
-  where gateway_tx is not null;
 
 -- Payment events from this point on are written only through the atomic
 -- acceptance RPC, so an event and its intent state cannot diverge.
 revoke insert, update, delete on table public.payment_events
   from public, anon, authenticated, service_role;
+revoke all privileges on table public.payment_events from service_role;
+
+create or replace function public.get_x402_payment_intent(
+  p_network text,
+  p_domain_id integer,
+  p_verifying_contract text,
+  p_payer text,
+  p_authorization_nonce text
+)
+returns table (
+  intent_id uuid,
+  network text,
+  domain_id integer,
+  verifying_contract text,
+  payer text,
+  recipient text,
+  token text,
+  amount_base_units numeric,
+  authorization_nonce text,
+  endpoint text,
+  status text,
+  response_status integer,
+  response_body jsonb,
+  provider_transfer_id text,
+  provider_status text
+)
+language sql
+security definer
+set search_path = pg_catalog, public
+as $$
+  select
+    i.id,
+    i.network,
+    i.domain_id,
+    i.verifying_contract,
+    i.payer,
+    i.recipient,
+    i.token,
+    i.amount_base_units,
+    i.authorization_nonce,
+    i.endpoint,
+    i.status,
+    i.response_status,
+    i.response_body,
+    i.provider_transfer_id,
+    i.provider_status
+  from public.x402_payment_intents i
+  where i.network = p_network
+    and i.domain_id = p_domain_id
+    and i.verifying_contract = lower(p_verifying_contract)
+    and i.payer = lower(p_payer)
+    and i.authorization_nonce = lower(p_authorization_nonce)
+$$;
 
 create or replace function public.prepare_x402_payment_intent(
   p_network text,
@@ -285,6 +334,9 @@ begin
 end;
 $$;
 
+revoke all on function public.get_x402_payment_intent(
+  text, integer, text, text, text
+) from public, anon, authenticated;
 revoke all on function public.prepare_x402_payment_intent(
   text, integer, text, text, text, text, numeric, text, text
 ) from public, anon, authenticated;
@@ -297,6 +349,9 @@ revoke all on function public.record_x402_provider_acceptance(uuid, text, text)
 revoke all on function public.save_x402_payment_response(uuid, integer, jsonb)
   from public, anon, authenticated;
 
+grant execute on function public.get_x402_payment_intent(
+  text, integer, text, text, text
+) to service_role;
 grant execute on function public.prepare_x402_payment_intent(
   text, integer, text, text, text, text, numeric, text, text
 ) to service_role;
