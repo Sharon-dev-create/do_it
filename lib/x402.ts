@@ -240,8 +240,35 @@ export function withGateway(
       const requestHash = createHash("sha256")
         .update(req.method)
         .update("\n")
+        .update(req.nextUrl.pathname)
+        .update(req.nextUrl.search)
+        .update("\n")
         .update(Buffer.from(await req.clone().arrayBuffer()))
         .digest("hex");
+
+      const verifyResult = await facilitator.verify(
+        paymentPayload,
+        requirements,
+      );
+      if (!verifyResult.isValid) {
+        return NextResponse.json(
+          {
+            error: "Payment verification failed",
+            reason: verifyResult.invalidReason,
+          },
+          { status: 402 },
+        );
+      }
+      if (
+        verifyResult.payer &&
+        (!isAddress(verifyResult.payer) ||
+          verifyResult.payer.toLowerCase() !== payer.toLowerCase())
+      ) {
+        return NextResponse.json(
+          { error: "Circle Gateway verified a different authorization payer." },
+          { status: 402 },
+        );
+      }
 
       const { data: existingIntentData, error: existingIntentError } = await supabase.rpc(
         "get_x402_payment_intent",
@@ -320,33 +347,6 @@ export function withGateway(
               status: existingIntent.status,
             },
             { status: 503, headers: { "Cache-Control": "no-store" } },
-          );
-        }
-      }
-
-      if (!existingIntent || existingIntent.status === "verified") {
-        const verifyResult = await facilitator.verify(
-          paymentPayload,
-          requirements,
-        );
-
-        if (!verifyResult.isValid) {
-          return NextResponse.json(
-            {
-              error: "Payment verification failed",
-              reason: verifyResult.invalidReason,
-            },
-            { status: 402 },
-          );
-        }
-        if (
-          verifyResult.payer &&
-          (!isAddress(verifyResult.payer) ||
-            verifyResult.payer.toLowerCase() !== payer.toLowerCase())
-        ) {
-          return NextResponse.json(
-            { error: "Circle Gateway verified a different authorization payer." },
-            { status: 402 },
           );
         }
       }

@@ -18,6 +18,12 @@ export type X402ExpectedEvidence = {
   amountBaseUnits: string;
 };
 
+export type X402AssessedTransfer = {
+  mismatches: string[];
+  unavailable: string[];
+  candidate: boolean;
+};
+
 export type X402TransferLookupClient = {
   getTransferById: (id: string) => Promise<X402TransferEvidence>;
   searchTransfers: (params: {
@@ -74,7 +80,7 @@ export async function lookupX402Transfers(
 export function assessX402TransferEvidence(
   transfer: X402TransferEvidence,
   expected: X402ExpectedEvidence,
-): { mismatches: string[]; unavailable: string[]; candidate: boolean } {
+): X402AssessedTransfer {
   const mismatches: string[] = [];
   const unavailable: string[] = [];
 
@@ -122,4 +128,15 @@ export function assessX402TransferEvidence(
     unavailable,
     candidate: mismatches.length === 0 && unavailable.length === 0,
   };
+}
+
+export function hasUniqueCompleteX402Candidate(
+  assessments: X402AssessedTransfer[],
+  lookupComplete: boolean,
+): boolean {
+  return lookupComplete &&
+    assessments.length === 1 &&
+    assessments[0].candidate &&
+    assessments[0].mismatches.length === 0 &&
+    assessments[0].unavailable.length === 0;
 }

@@ -1,7 +1,11 @@
 import { GatewayClient, type TransferResponse } from "@circle-fin/x402-batching/client";
 import { generatePrivateKey } from "viem/accounts";
 import { isAddress } from "viem";
-import { assessX402TransferEvidence, lookupX402Transfers } from "../lib/x402-reconciliation.ts";
+import {
+  assessX402TransferEvidence,
+  hasUniqueCompleteX402Candidate,
+  lookupX402Transfers,
+} from "../lib/x402-reconciliation.ts";
 
 type Network = "testnet" | "mainnet";
 
@@ -85,9 +89,12 @@ async function main() {
     }),
   }));
   const mismatched = assessed.filter(({ evidence }) => evidence.mismatches.length > 0);
-  const candidates = assessed.filter(({ evidence }) => evidence.candidate);
+  const uniqueCompleteCandidate = hasUniqueCompleteX402Candidate(
+    assessed.map(({ evidence }) => evidence),
+    lookup.complete,
+  );
   console.log(JSON.stringify({
-    outcome: candidates.length === 1 && mismatched.length === 0
+    outcome: uniqueCompleteCandidate
       ? "candidate_requires_operator_review"
       : "unresolved",
     network: networkId,
@@ -101,7 +108,7 @@ async function main() {
     warning: "This report is read-only. Provider lookup data is a candidate, not authority to mark an intent paid or replay settlement.",
     transfers: assessed,
   }, null, 2));
-  if (!lookup.complete || candidates.length !== 1 || mismatched.length > 0) {
+  if (!uniqueCompleteCandidate || mismatched.length > 0) {
     process.exitCode = 2;
   }
 }

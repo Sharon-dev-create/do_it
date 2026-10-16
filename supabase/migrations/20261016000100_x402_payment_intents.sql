@@ -81,7 +81,7 @@ returns table (
 )
 language sql
 security definer
-set search_path = pg_catalog, public
+set search_path = pg_catalog
 as $$
   select
     i.id,
@@ -130,7 +130,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = pg_catalog, public
+set search_path = pg_catalog
 as $$
 declare
   v_intent public.x402_payment_intents%rowtype;
@@ -179,7 +179,7 @@ create or replace function public.claim_x402_payment_intent(p_intent_id uuid)
 returns table (claimed boolean, intent_status text)
 language plpgsql
 security definer
-set search_path = pg_catalog, public
+set search_path = pg_catalog
 as $$
 declare
   v_status text;
@@ -215,7 +215,7 @@ create or replace function public.mark_x402_payment_recovery_pending(
 returns void
 language plpgsql
 security definer
-set search_path = pg_catalog, public
+set search_path = pg_catalog
 as $$
 begin
   update public.x402_payment_intents i
@@ -241,7 +241,7 @@ create or replace function public.record_x402_provider_acceptance(
 returns table (intent_status text, event_id uuid)
 language plpgsql
 security definer
-set search_path = pg_catalog, public
+set search_path = pg_catalog
 as $$
 declare
   v_intent public.x402_payment_intents%rowtype;
@@ -305,7 +305,7 @@ create or replace function public.save_x402_payment_response(
 returns table (intent_status text, response_status integer, response_body jsonb)
 language plpgsql
 security definer
-set search_path = pg_catalog, public
+set search_path = pg_catalog
 as $$
 declare
   v_intent public.x402_payment_intents%rowtype;
