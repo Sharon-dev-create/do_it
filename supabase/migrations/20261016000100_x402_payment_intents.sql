@@ -11,6 +11,7 @@ create table public.x402_payment_intents (
   amount_base_units numeric(78, 0) not null check (amount_base_units > 0),
   authorization_nonce text not null,
   endpoint text not null,
+  request_hash text not null check (request_hash ~ '^[0-9a-f]{64}$'),
   status text not null check (status in (
     'verified',
     'settlement_submitted',
@@ -71,6 +72,7 @@ returns table (
   amount_base_units numeric,
   authorization_nonce text,
   endpoint text,
+  request_hash text,
   status text,
   response_status integer,
   response_body jsonb,
@@ -92,6 +94,7 @@ as $$
     i.amount_base_units,
     i.authorization_nonce,
     i.endpoint,
+    i.request_hash,
     i.status,
     i.response_status,
     i.response_body,
@@ -114,7 +117,8 @@ create or replace function public.prepare_x402_payment_intent(
   p_token text,
   p_amount_base_units numeric,
   p_authorization_nonce text,
-  p_endpoint text
+  p_endpoint text,
+  p_request_hash text
 )
 returns table (
   intent_id uuid,
@@ -134,11 +138,12 @@ begin
   insert into public.x402_payment_intents (
     network, domain_id, verifying_contract, payer, recipient, token,
     amount_base_units, authorization_nonce, endpoint, status
+    , request_hash
   )
   values (
     p_network, p_domain_id, lower(p_verifying_contract), lower(p_payer),
     lower(p_recipient), lower(p_token), p_amount_base_units,
-    lower(p_authorization_nonce), p_endpoint, 'verified'
+    lower(p_authorization_nonce), p_endpoint, 'verified', p_request_hash
   )
   on conflict (network, domain_id, verifying_contract, payer, authorization_nonce)
   do nothing;
@@ -155,7 +160,8 @@ begin
   if v_intent.recipient <> lower(p_recipient)
     or v_intent.token <> lower(p_token)
     or v_intent.amount_base_units <> p_amount_base_units
-    or v_intent.endpoint <> p_endpoint then
+    or v_intent.endpoint <> p_endpoint
+    or v_intent.request_hash <> p_request_hash then
     raise exception 'x402 authorization was already bound to different payment requirements';
   end if;
 
@@ -338,7 +344,7 @@ revoke all on function public.get_x402_payment_intent(
   text, integer, text, text, text
 ) from public, anon, authenticated;
 revoke all on function public.prepare_x402_payment_intent(
-  text, integer, text, text, text, text, numeric, text, text
+  text, integer, text, text, text, text, numeric, text, text, text
 ) from public, anon, authenticated;
 revoke all on function public.claim_x402_payment_intent(uuid)
   from public, anon, authenticated;
@@ -353,7 +359,7 @@ grant execute on function public.get_x402_payment_intent(
   text, integer, text, text, text
 ) to service_role;
 grant execute on function public.prepare_x402_payment_intent(
-  text, integer, text, text, text, text, numeric, text, text
+  text, integer, text, text, text, text, numeric, text, text, text
 ) to service_role;
 grant execute on function public.claim_x402_payment_intent(uuid) to service_role;
 grant execute on function public.mark_x402_payment_recovery_pending(uuid, text)
