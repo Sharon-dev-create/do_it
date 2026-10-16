@@ -53,6 +53,7 @@ type X402FlowDependencies = {
   expectedPayer: string;
   createPaymentResponse: (transferId: string) => string;
   onRecoveryStateWriteFailure: (intentId: string, errorCode: string) => void;
+  onPostAcceptanceFailure: (intentId: string, errorCode: string) => void;
 };
 
 async function markRecoveryPending(
@@ -164,6 +165,7 @@ export async function executeX402PaymentFlow(
   try {
     generated = await dependencies.buildResponse();
   } catch {
+    dependencies.onPostAcceptanceFailure(intent.id, "content_generation_failed");
     return { kind: "pending", status: "provider_accepted" };
   }
 
@@ -182,6 +184,7 @@ export async function executeX402PaymentFlow(
       },
     };
   } catch {
+    dependencies.onPostAcceptanceFailure(intent.id, "response_persistence_failed");
     return { kind: "pending", status: "provider_accepted" };
   }
 }

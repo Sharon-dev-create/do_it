@@ -429,6 +429,12 @@ export function withGateway(
             errorCode,
           });
         },
+        onPostAcceptanceFailure: (intentId, errorCode) => {
+          console.error("x402 accepted payment is awaiting response recovery:", {
+            intentId,
+            errorCode,
+          });
+        },
       });
 
       if (flow.kind === "pending") {
