@@ -31,6 +31,10 @@ import {
 } from "@/lib/gateway-network";
 import { isAddress, parseUnits } from "viem";
 import { executeX402PaymentFlow, type X402Intent, type X402SettlementResult } from "@/lib/x402-payment-flow";
+import {
+  assertX402TestnetSettlementAllowed,
+  settleX402OnTestnet,
+} from "@/lib/x402-settlement-guard";
 
 const facilitator = new BatchFacilitatorClient({
   url: getGatewayFacilitatorUrl(SERVER_ARC_NETWORK_CONFIG.name),
@@ -141,6 +145,22 @@ export function withGateway(
 ) {
   return async (req: NextRequest) => {
     await connection();
+    try {
+      assertX402TestnetSettlementAllowed(
+        SERVER_ARC_NETWORK_CONFIG.name,
+        process.env,
+      );
+    } catch (error) {
+      const errorName = error instanceof Error ? error.name : "UnknownError";
+      console.error("[x402] Settlement disabled by server network policy:", {
+        endpoint,
+        errorName,
+      });
+      return NextResponse.json(
+        { error: "x402 payments are temporarily available on Arc Testnet only." },
+        { status: 503, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     const paymentSignature = req.headers.get("payment-signature");
     let requirements: ReturnType<typeof buildPaymentRequirements>;
     try {
@@ -390,7 +410,11 @@ export function withGateway(
           return { claimed: claim.claimed, status: claim.intent_status };
         },
         settle: async () => {
-          const result = await facilitator.settle(paymentPayload, requirements);
+          const result = await settleX402OnTestnet(
+            SERVER_ARC_NETWORK_CONFIG.name,
+            process.env,
+            () => facilitator.settle(paymentPayload, requirements),
+          );
           return {
             success: result.success,
             network: result.network,
