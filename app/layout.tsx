@@ -18,6 +18,7 @@
 
 import type { Metadata } from "next";
 import Script from "next/script";
+import { Suspense } from "react";
 import { Providers } from "@/app/providers";
 import "./globals.css";
 
@@ -54,26 +55,30 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <Script
-        id="doit-theme-init"
-        strategy="beforeInteractive"
-        dangerouslySetInnerHTML={{
-          __html: `(() => {
-            let preference = "system";
-            try {
-              const saved = localStorage.getItem("doit-theme");
-              if (saved === "light" || saved === "dark" || saved === "system") preference = saved;
-            } catch {
-              preference = "system";
-            }
-            const dark = preference === "dark" || (preference === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
-            document.documentElement.dataset.themePreference = preference;
-            document.documentElement.dataset.theme = dark ? "dark" : "light";
-          })();`,
-        }}
-      />
+      <head>
+        <Script
+          id="doit-theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `(() => {
+              let preference = "system";
+              try {
+                const saved = localStorage.getItem("doit-theme");
+                if (saved === "light" || saved === "dark" || saved === "system") preference = saved;
+              } catch {
+                preference = "system";
+              }
+              const dark = preference === "dark" || (preference === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+              document.documentElement.dataset.themePreference = preference;
+              document.documentElement.dataset.theme = dark ? "dark" : "light";
+            })();`,
+          }}
+        />
+      </head>
       <body className="antialiased">
-        <Providers>{children}</Providers>
+        <Suspense fallback={null}>
+          <Providers>{children}</Providers>
+        </Suspense>
       </body>
     </html>
   );

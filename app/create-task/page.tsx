@@ -14,7 +14,7 @@ import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { ARC_USDC_ADDRESS, ERC20_ABI } from "@/lib/contracts/usdc";
 import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
-import { assertClientArcEscrowDeployment } from "@/lib/arc-deployment-client";
+import { assertServerArcEscrowDeployment } from "@/lib/arc-deployment-validation";
 
 async function waitForArcReceipt(
   publicClient: NonNullable<ReturnType<typeof usePublicClient>>,
@@ -124,7 +124,7 @@ export default function CreateTaskPage() {
     let fundingConfirmed = false;
 
     try {
-      await assertClientArcEscrowDeployment(publicClient);
+      await assertServerArcEscrowDeployment();
       const reward = parseUnits(rewardUsdc, 6);
       if (reward > 99_999_999_999_999_999_999n) {
         throw new Error("Reward exceeds the supported 14-digit USDC maximum.");
