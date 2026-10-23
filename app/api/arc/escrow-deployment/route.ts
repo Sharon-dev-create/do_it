@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
+import { connection, NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
 import { ARC_TESTNET_ESCROW_ADDRESS, getArcNetworkConfig } from "@/lib/arc-network";
 import { validateArcTestnetEscrowDeployment } from "@/lib/arc-deployment-validation";
-
-export const dynamic = "force-dynamic";
+import { assertArcEscrowDeployment } from "@/lib/escrow-v2-server";
 
 export async function GET() {
+  await connection();
   try {
     const config = getArcNetworkConfig("testnet", process.env.ARC_TESTNET_RPC_URL);
     const client = createPublicClient({
@@ -22,6 +22,9 @@ export async function GET() {
       publicNetwork: process.env.NEXT_PUBLIC_ARC_NETWORK,
       rpcUrl: process.env.ARC_TESTNET_RPC_URL,
     });
+    // Keep the existing verifier, USDC address, and decimals checks as part
+    // of the preflight before allowing a creator to submit transactions.
+    await assertArcEscrowDeployment();
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Arc Testnet escrow deployment validation failed:", error instanceof Error ? error.message : "unknown error");
