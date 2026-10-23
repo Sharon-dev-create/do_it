@@ -201,7 +201,8 @@ Set both `ARC_NETWORK` and `NEXT_PUBLIC_ARC_NETWORK` to the same explicit value 
 | --- | --- | --- | --- |
 | `ARC_NETWORK` | Yes | Server configuration | Selects `testnet` or `mainnet`; must match the public selector. |
 | `NEXT_PUBLIC_ARC_NETWORK` | Yes | Client-visible | Selects the same Arc network for RainbowKit, wallet status, and browser transactions. |
-| `NEXT_PUBLIC_ARC_TESTNET_RPC_URL` / `ARC_TESTNET_RPC_URL` | Optional | Public RPC / server config | Testnet RPC overrides. The server rejects an RPC whose chain ID is not 5042002. Default: `https://rpc.testnet.arc.io`. |
+| `NEXT_PUBLIC_ARC_TESTNET_RPC_URL` | Optional | Client-visible | Optional browser RPC override for Testnet. |
+| `ARC_TESTNET_RPC_URL` | Yes for the server-side Testnet escrow preflight | Server-only | Configure an HTTP(S) Arc Testnet RPC URL in each applicable deployment environment. Do not add a `NEXT_PUBLIC_` prefix. The preflight rejects an RPC whose chain ID is not 5042002. |
 | `NEXT_PUBLIC_ARC_MAINNET_RPC_URL` / `ARC_MAINNET_RPC_URL` | Required for Mainnet | Public RPC / server config | Explicit browser and server RPC endpoints. Missing values fail closed; Gateway and escrow RPC operations verify chain ID 5042. |
 | `NEXT_PUBLIC_ARC_MAINNET_ESCROW_ADDRESS` | Required for Mainnet | Public contract address | Address of the separately audited and verified Mainnet escrow deployment. |
 | `ARC_MAINNET_ESCROW_ADDRESS` | Required for Mainnet | Server config | Must match the public escrow address. |

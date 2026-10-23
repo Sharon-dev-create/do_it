@@ -1,4 +1,6 @@
 import { getArcNetworkConfig, ARC_TESTNET_ESCROW_ADDRESS } from "./arc-network.ts";
+import { ArcPreflightError } from "./arc-preflight-diagnostics.ts";
+import type { ArcPreflightStage } from "./arc-preflight-diagnostics.ts";
 
 type DeploymentClient = {
   getChainId(): Promise<number>;
@@ -10,28 +12,34 @@ export async function validateArcTestnetEscrowDeployment(
   settings: { network: string | undefined; publicNetwork?: string | undefined; rpcUrl: string | undefined },
 ) {
   if (settings.network !== "testnet") {
-    throw new Error("Arc escrow task creation requires ARC_NETWORK=testnet.");
+    throw new ArcPreflightError("NETWORK_CONFIG_INVALID", "network_config", "Arc escrow task creation requires ARC_NETWORK=testnet.");
   }
   if (settings.publicNetwork !== undefined && settings.publicNetwork !== "testnet") {
-    throw new Error("NEXT_PUBLIC_ARC_NETWORK must match ARC_NETWORK=testnet.");
+    throw new ArcPreflightError("NETWORK_CONFIG_INVALID", "network_config", "NEXT_PUBLIC_ARC_NETWORK must match ARC_NETWORK=testnet.");
   }
   const rpcUrl = settings.rpcUrl?.trim();
-  if (!rpcUrl) throw new Error("ARC_TESTNET_RPC_URL must be configured on the server.");
+  if (!rpcUrl) throw new ArcPreflightError("RPC_URL_MISSING", "rpc_url", "ARC_TESTNET_RPC_URL must be configured on the server.");
   let parsed: URL;
-  try { parsed = new URL(rpcUrl); } catch { throw new Error("ARC_TESTNET_RPC_URL must be a valid HTTP(S) URL."); }
+  try { parsed = new URL(rpcUrl); } catch { throw new ArcPreflightError("RPC_URL_INVALID", "rpc_url", "ARC_TESTNET_RPC_URL must be a valid HTTP(S) URL."); }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new Error("ARC_TESTNET_RPC_URL must be a valid HTTP(S) URL.");
+    throw new ArcPreflightError("RPC_URL_INVALID", "rpc_url", "ARC_TESTNET_RPC_URL must be a valid HTTP(S) URL.");
   }
 
   const expectedChainId = getArcNetworkConfig("testnet").chainId;
-  if (expectedChainId !== 5042002) throw new Error("Arc Testnet chain configuration is inconsistent.");
-  const actualChainId = await client.getChainId();
-  if (actualChainId !== expectedChainId) {
-    throw new Error(`RPC chain ID ${actualChainId} does not match Arc Testnet (${expectedChainId}).`);
+  if (expectedChainId !== 5042002) {
+    throw new ArcPreflightError("NETWORK_CONFIG_INVALID", "network_config", "Arc Testnet chain configuration is inconsistent.");
   }
-  const bytecode = await client.getCode({ address: ARC_TESTNET_ESCROW_ADDRESS });
+  let actualChainId: number;
+  try { actualChainId = await client.getChainId(); }
+  catch { throw new ArcPreflightError("RPC_UNAVAILABLE", "rpc_chain_id", "Arc Testnet RPC chain ID request failed."); }
+  if (actualChainId !== expectedChainId) {
+    throw new ArcPreflightError("RPC_WRONG_CHAIN", "rpc_chain_id", `RPC chain ID ${actualChainId} does not match Arc Testnet (${expectedChainId}).`);
+  }
+  let bytecode: `0x${string}` | undefined;
+  try { bytecode = await client.getCode({ address: ARC_TESTNET_ESCROW_ADDRESS }); }
+  catch { throw new ArcPreflightError("RPC_UNAVAILABLE", "escrow_code_read", "Arc Testnet escrow bytecode request failed."); }
   if (!bytecode || bytecode === "0x") {
-    throw new Error("No escrow contract is deployed at the configured Arc Testnet address.");
+    throw new ArcPreflightError("ESCROW_CODE_MISSING", "escrow_code_check", "No escrow contract is deployed at the configured Arc Testnet address.");
   }
 }
 

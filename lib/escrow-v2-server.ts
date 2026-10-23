@@ -10,6 +10,8 @@ import {
   getArcVerifierPrivateKey,
 } from "@/lib/arc-network";
 import { getConfiguredVerifierAddress, SERVER_ARC_NETWORK_CONFIG } from "@/lib/arc-network-server";
+import { ArcPreflightError } from "@/lib/arc-preflight-diagnostics";
+import type { ArcPreflightStage } from "@/lib/arc-preflight-diagnostics";
 
 export const ARC_CHAIN_ID = ARC_NETWORK_CONFIG.chainId;
 export const ARC_EXPLORER = ARC_NETWORK_CONFIG.explorerUrl;
@@ -45,40 +47,118 @@ export function isConfiguredV2Worker(address: string): boolean {
   return isV2TestWorkerAllowed(address, workerAllowlist);
 }
 
-export async function assertArcEscrowDeployment() {
-  const expectedVerifierAddress = getConfiguredVerifierAddress();
-  assertArcChainId(ARC_NETWORK_CONFIG.name, await escrowPublicClient.getChainId());
-  const bytecode = await escrowPublicClient.getCode({ address: DO_IT_ESCROW_ADDRESS });
+export async function assertArcEscrowDeployment(
+  onStage?: (stage: ArcPreflightStage) => void,
+) {
+  const diagnosticMode = Boolean(onStage);
+  onStage?.("verifier_config");
+  let expectedVerifierAddress: `0x${string}`;
+  try {
+    expectedVerifierAddress = getConfiguredVerifierAddress();
+  } catch (error) {
+    if (diagnosticMode) {
+      throw new ArcPreflightError("VERIFIER_CONFIG_INVALID", "verifier_config", "The configured verifier is invalid.");
+    }
+    throw error;
+  }
+
+  onStage?.("rpc_chain_id");
+  let actualChainId: number;
+  try {
+    actualChainId = await escrowPublicClient.getChainId();
+  } catch (error) {
+    if (diagnosticMode) {
+      throw new ArcPreflightError("RPC_UNAVAILABLE", "rpc_chain_id", "Arc RPC chain ID request failed.");
+    }
+    throw error;
+  }
+  if (actualChainId !== ARC_CHAIN_ID) {
+    if (diagnosticMode) {
+      throw new ArcPreflightError("RPC_WRONG_CHAIN", "rpc_chain_id", `RPC chain ID ${actualChainId} does not match the selected Arc network ${ARC_CHAIN_ID}.`);
+    }
+    assertArcChainId(ARC_NETWORK_CONFIG.name, actualChainId);
+  }
+
+  onStage?.("escrow_code_read");
+  let bytecode: `0x${string}` | undefined;
+  try {
+    bytecode = await escrowPublicClient.getCode({ address: DO_IT_ESCROW_ADDRESS });
+  } catch (error) {
+    if (diagnosticMode) {
+      throw new ArcPreflightError("RPC_UNAVAILABLE", "escrow_code_read", "Arc escrow bytecode request failed.");
+    }
+    throw error;
+  }
   if (!bytecode || bytecode === "0x") {
+    if (diagnosticMode) {
+      throw new ArcPreflightError("ESCROW_CODE_MISSING", "escrow_code_check", "No escrow contract is deployed at the configured network address.");
+    }
     throw new Error(`No escrow contract is deployed at the configured ${ARC_NETWORK_CONFIG.label} address.`);
   }
   if (ARC_NETWORK_CONFIG.name === "mainnet") {
-    assertRuntimeCodeHash(bytecode, process.env.ARC_MAINNET_ESCROW_CODE_HASH);
+    try {
+      assertRuntimeCodeHash(bytecode, process.env.ARC_MAINNET_ESCROW_CODE_HASH);
+    } catch (error) {
+      if (diagnosticMode) {
+        throw new ArcPreflightError("ESCROW_CONFIGURATION_INVALID", "escrow_configuration_check", "Escrow runtime code does not match its configured hash.");
+      }
+      throw error;
+    }
   }
-  const [tokenAddress, deployedVerifierAddress] = await Promise.all([
-    escrowPublicClient.readContract({
-      address: DO_IT_ESCROW_ADDRESS,
-      abi: DO_IT_ESCROW_ABI,
-      functionName: "usdc",
-    }),
-    escrowPublicClient.readContract({
-      address: DO_IT_ESCROW_ADDRESS,
-      abi: DO_IT_ESCROW_ABI,
-      functionName: "verifier",
-    }),
-  ]);
+  onStage?.("escrow_config_read");
+  let tokenAddress: `0x${string}`;
+  let deployedVerifierAddress: `0x${string}`;
+  try {
+    [tokenAddress, deployedVerifierAddress] = await Promise.all([
+      escrowPublicClient.readContract({
+        address: DO_IT_ESCROW_ADDRESS,
+        abi: DO_IT_ESCROW_ABI,
+        functionName: "usdc",
+      }),
+      escrowPublicClient.readContract({
+        address: DO_IT_ESCROW_ADDRESS,
+        abi: DO_IT_ESCROW_ABI,
+        functionName: "verifier",
+      }),
+    ]);
+  } catch (error) {
+    if (diagnosticMode) {
+      throw new ArcPreflightError("RPC_UNAVAILABLE", "escrow_config_read", "Arc escrow configuration read failed.");
+    }
+    throw error;
+  }
+  onStage?.("usdc_address_check");
   if (tokenAddress.toLowerCase() !== ARC_NETWORK_CONFIG.usdcAddress.toLowerCase()) {
+    if (diagnosticMode) {
+      throw new ArcPreflightError("USDC_ADDRESS_INVALID", "usdc_address_check", "The escrow uses an unexpected USDC address.");
+    }
     throw new Error(`Configured escrow uses an unexpected USDC address on ${ARC_NETWORK_CONFIG.label}.`);
   }
   if (deployedVerifierAddress.toLowerCase() !== expectedVerifierAddress.toLowerCase()) {
+    if (diagnosticMode) {
+      throw new ArcPreflightError("VERIFIER_CONFIG_INVALID", "verifier_config", "The escrow verifier does not match its configured address.");
+    }
     throw new Error(`Configured escrow verifier does not match the ${ARC_NETWORK_CONFIG.label} verifier address.`);
   }
-  const usdcDecimals = await escrowPublicClient.readContract({
-    address: ARC_NETWORK_CONFIG.usdcAddress,
-    abi: erc20Abi,
-    functionName: "decimals",
-  });
+  onStage?.("usdc_decimals_read");
+  let usdcDecimals: number;
+  try {
+    usdcDecimals = await escrowPublicClient.readContract({
+      address: ARC_NETWORK_CONFIG.usdcAddress,
+      abi: erc20Abi,
+      functionName: "decimals",
+    });
+  } catch (error) {
+    if (diagnosticMode) {
+      throw new ArcPreflightError("RPC_UNAVAILABLE", "usdc_decimals_read", "USDC decimals request failed.");
+    }
+    throw error;
+  }
+  onStage?.("usdc_decimals_check");
   if (usdcDecimals !== ARC_NETWORK_CONFIG.usdcDecimals) {
+    if (diagnosticMode) {
+      throw new ArcPreflightError("USDC_DECIMALS_INVALID", "usdc_decimals_check", "USDC decimals do not match the network configuration.");
+    }
     throw new Error(`USDC ERC-20 decimals do not match the ${ARC_NETWORK_CONFIG.label} configuration.`);
   }
 }

@@ -1,12 +1,19 @@
 import { connection, NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
-import { ARC_TESTNET_ESCROW_ADDRESS, getArcNetworkConfig } from "@/lib/arc-network";
-import { validateArcTestnetEscrowDeployment } from "@/lib/arc-deployment-validation";
-import { assertArcEscrowDeployment } from "@/lib/escrow-v2-server";
+import {
+  createArcPreflightErrorResponse,
+  logArcPreflightFailure,
+  type ArcPreflightStage,
+} from "@/lib/arc-preflight-diagnostics";
 
 export async function GET() {
-  await connection();
+  let stage: ArcPreflightStage = "request";
   try {
+    await connection();
+    stage = "network_config";
+    const { getArcNetworkConfig } = await import("@/lib/arc-network");
+    const { validateArcTestnetEscrowDeployment } = await import("@/lib/arc-deployment-validation");
+    stage = "rpc_url";
     const config = getArcNetworkConfig("testnet", process.env.ARC_TESTNET_RPC_URL);
     const client = createPublicClient({
       chain: {
@@ -17,20 +24,20 @@ export async function GET() {
       },
       transport: http(config.rpcUrl),
     });
+    stage = "network_config";
     await validateArcTestnetEscrowDeployment(client, {
       network: process.env.ARC_NETWORK,
       publicNetwork: process.env.NEXT_PUBLIC_ARC_NETWORK,
       rpcUrl: process.env.ARC_TESTNET_RPC_URL,
     });
+    stage = "network_config";
+    const { assertArcEscrowDeployment } = await import("@/lib/escrow-v2-server");
     // Keep the existing verifier, USDC address, and decimals checks as part
     // of the preflight before allowing a creator to submit transactions.
-    await assertArcEscrowDeployment();
+    await assertArcEscrowDeployment((nextStage) => { stage = nextStage; });
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error("Arc Testnet escrow deployment validation failed:", error instanceof Error ? error.message : "unknown error");
-    return NextResponse.json(
-      { error: "Arc Testnet escrow is unavailable or misconfigured. Check the server deployment configuration." },
-      { status: 503 },
-    );
+    logArcPreflightFailure(error, stage);
+    return createArcPreflightErrorResponse();
   }
 }
