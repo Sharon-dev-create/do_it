@@ -1,4 +1,4 @@
-import { getArcNetworkConfig, ARC_TESTNET_ESCROW_ADDRESS } from "@/lib/arc-network";
+import { getArcNetworkConfig, ARC_TESTNET_ESCROW_ADDRESS } from "./arc-network.ts";
 
 type DeploymentClient = {
   getChainId(): Promise<number>;
