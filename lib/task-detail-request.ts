@@ -1,4 +1,4 @@
-import { isValidTaskId } from "./task-id";
+import { isValidTaskId } from "./task-id.ts";
 
 export function fetchTaskDetails(
   taskId: unknown,
