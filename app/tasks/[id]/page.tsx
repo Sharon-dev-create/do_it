@@ -14,6 +14,7 @@ import { BrandLink } from "@/components/brand-link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ARC_CHAIN_ID, ARC_EXPLORER_URL, ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 import { assertClientArcEscrowDeployment } from "@/lib/arc-deployment-client";
+import { isValidTaskId } from "@/lib/task-id";
 
 type Task = {
   id: string;
@@ -65,6 +66,7 @@ function TaskDetailContent() {
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [invalidTaskId, setInvalidTaskId] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [answer, setAnswer] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -150,12 +152,19 @@ function TaskDetailContent() {
   }
 
   useEffect(() => {
-    if (!id) return;
+    if (!isValidTaskId(id)) {
+      setTask(null);
+      setLoading(false);
+      setLoadError(false);
+      setInvalidTaskId(true);
+      return;
+    }
 
     async function loadTask() {
       setLoading(true);
       setTask(null);
       setLoadError(false);
+      setInvalidTaskId(false);
       setPendingClaim(null);
       setResult(null);
       try {
@@ -320,16 +329,18 @@ function TaskDetailContent() {
       <main className="doit-shell">
         <TaskDetailHeader />
         <section className="task-detail-state">
-          <div className="eyebrow">{loadError ? "TASK / ERROR" : "TASK / 404"}</div>
+          <div className="eyebrow">{loadError || invalidTaskId ? "TASK / ERROR" : "TASK / 404"}</div>
           <h1>
-            {loadError ? "Unable to load" : "Not found"}<span>.</span>
+            {invalidTaskId ? "Invalid task link" : loadError ? "Unable to load" : "Not found"}<span>.</span>
           </h1>
           <p>
-            {loadError
+            {invalidTaskId
+              ? "This task link does not contain a valid task ID."
+              : loadError
               ? "We could not fetch this task. Check your connection and try again."
               : "This task does not exist or is no longer available."}
           </p>
-          {loadError && (
+          {loadError && !invalidTaskId && (
             <button
               className="task-submit-button"
               type="button"
