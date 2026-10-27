@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, usePublicClient, useSignMessage, useWriteContract } from "wagmi";
@@ -14,7 +14,7 @@ import { BrandLink } from "@/components/brand-link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ARC_CHAIN_ID, ARC_EXPLORER_URL, ARC_NETWORK_CONFIG } from "@/lib/arc-network";
 import { assertClientArcEscrowDeployment } from "@/lib/arc-deployment-client";
-import { isValidTaskId } from "@/lib/task-id";
+import { fetchTaskDetails } from "@/lib/task-detail-request";
 
 type Task = {
   id: string;
@@ -54,10 +54,9 @@ function TaskDetailHeader() {
   );
 }
 
-function TaskDetailContent() {
-  const params = useParams<{ id: string }>();
+function TaskDetailContent({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
-  const id = params.id;
   const { address, chainId, isConnected } = useAccount();
   const publicClient = usePublicClient();
   const { signMessageAsync } = useSignMessage();
@@ -152,14 +151,6 @@ function TaskDetailContent() {
   }
 
   useEffect(() => {
-    if (!isValidTaskId(id)) {
-      setTask(null);
-      setLoading(false);
-      setLoadError(false);
-      setInvalidTaskId(true);
-      return;
-    }
-
     async function loadTask() {
       setLoading(true);
       setTask(null);
@@ -168,8 +159,12 @@ function TaskDetailContent() {
       setPendingClaim(null);
       setResult(null);
       try {
-        const suffix = address ? `?worker=${encodeURIComponent(address)}` : "";
-        const response = await fetch(`/api/tasks/${id}${suffix}`);
+        const response = await fetchTaskDetails(id, address);
+
+        if (!response) {
+          setInvalidTaskId(true);
+          return;
+        }
 
         if (!response.ok) {
           if (response.status !== 404) {
@@ -544,6 +539,6 @@ function TaskDetailContent() {
       );
 }
 
-export default function TaskDetailPage() {
-  return <Suspense fallback={<main className="doit-shell"><TaskDetailHeader /><section className="task-detail-state"><div className="eyebrow">TASK / LOADING</div><h1>Loading<span>.</span></h1><p>Fetching the mission details.</p></section></main>}><TaskDetailContent /></Suspense>;
+export default function TaskDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  return <Suspense fallback={<main className="doit-shell"><TaskDetailHeader /><section className="task-detail-state"><div className="eyebrow">TASK / LOADING</div><h1>Loading<span>.</span></h1><p>Fetching the mission details.</p></section></main>}><TaskDetailContent params={params} /></Suspense>;
 }
