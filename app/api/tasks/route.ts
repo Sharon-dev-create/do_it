@@ -5,9 +5,43 @@ import { ARC_USDC_ADDRESS } from "@/lib/contracts/usdc";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
 import { ARC_CHAIN_ID, assertArcEscrowDeployment, escrowPublicClient } from "@/lib/escrow-v2-server";
 import { ARC_NETWORK_CONFIG } from "@/lib/arc-network";
+import {
+  runTaskListQuery,
+  taskListFailureDiagnostic,
+  validateTaskListSupabaseConfig,
+  type TaskListFailureStage,
+} from "@/lib/task-list-diagnostics";
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseConfigIssues = validateTaskListSupabaseConfig(supabaseUrl, supabaseServiceRoleKey);
+let supabase: ReturnType<typeof createClient> | null = null;
+
+if (supabaseConfigIssues.length) {
+  for (const code of supabaseConfigIssues) {
+    console.error("Task listing initialization failed", {
+      category: "configuration",
+      stage: "client_init",
+      code,
+    });
+  }
+} else {
+  try {
+    supabase = createClient(supabaseUrl!, supabaseServiceRoleKey!);
+  } catch {
+    console.error("Task listing initialization failed", {
+      category: "configuration",
+      stage: "client_init",
+      code: "SUPABASE_CLIENT_INIT_FAILED",
+    });
+  }
+}
+
 const PUBLIC_TASK_FIELDS = "id, title, description, reward_usdc, created_by, status, created_at, updated_at, blockchain_task_id, create_tx_hash, fund_tx_hash, contract_version";
+
+function logTaskListFailure(error: unknown, stage: TaskListFailureStage) {
+  console.error("Task listing failed", taskListFailureDiagnostic(error, stage));
+}
 
 export async function POST(request: Request) {
   try {
@@ -90,11 +124,24 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+  if (!supabase) {
+    return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });
+  }
+
+  let stage: TaskListFailureStage = "query";
   try {
-    const { data, error } = await supabase.from("tasks").select(PUBLIC_TASK_FIELDS).eq("status", "open").is("archived_at", null).order("created_at", { ascending: false });
-    if (error) throw error;
-    return NextResponse.json({ tasks: data });
-  } catch {
+    const result = await runTaskListQuery(
+      () => supabase!.from("tasks").select(PUBLIC_TASK_FIELDS).eq("status", "open").is("archived_at", null).order("created_at", { ascending: false }),
+      (error) => logTaskListFailure(error, "query"),
+    );
+    if (!result.ok) {
+      return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });
+    }
+
+    stage = "serialize";
+    return NextResponse.json({ tasks: result.data });
+  } catch (error) {
+    logTaskListFailure(error, stage);
     return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });
   }
 }
