@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { decodeEventLog, isAddress, isHash, parseUnits } from "viem";
 import { ARC_USDC_ADDRESS } from "@/lib/contracts/usdc";
 import { DO_IT_ESCROW_ABI, DO_IT_ESCROW_ADDRESS } from "@/lib/contracts/doItEscrow";
@@ -15,7 +15,7 @@ import {
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabaseConfigIssues = validateTaskListSupabaseConfig(supabaseUrl, supabaseServiceRoleKey);
-let supabase: ReturnType<typeof createClient> | null = null;
+let supabase: SupabaseClient | null = null;
 
 if (supabaseConfigIssues.length) {
   for (const code of supabaseConfigIssues) {
@@ -45,6 +45,10 @@ function logTaskListFailure(error: unknown, stage: TaskListFailureStage) {
 
 export async function POST(request: Request) {
   try {
+    const db = supabase;
+    if (!db) {
+      return NextResponse.json({ error: "Unable to verify and save task metadata." }, { status: 500 });
+    }
     const body = await request.json();
     const { title, description, reward_usdc, correct_answer, created_by, blockchain_task_id, create_tx_hash, fund_tx_hash } = body ?? {};
     if (typeof title !== "string" || title.trim().length < 3 || title.trim().length > 120 ||
@@ -64,7 +68,7 @@ export async function POST(request: Request) {
     }
 
     // Idempotent metadata recovery: same create transaction returns the saved row.
-    const { data: existing } = await supabase.from("tasks").select(PUBLIC_TASK_FIELDS).eq("create_tx_hash", create_tx_hash).maybeSingle();
+    const { data: existing } = await db.from("tasks").select(PUBLIC_TASK_FIELDS).eq("create_tx_hash", create_tx_hash).maybeSingle();
     if (existing) return NextResponse.json({ task: existing, recovered: true }, { status: 200 });
 
     await assertArcEscrowDeployment();
@@ -101,13 +105,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "V2 task is not funded or its creator/reward differs" }, { status: 409 });
     }
 
-    const { data, error } = await supabase.from("tasks").insert({
+    const { data, error } = await db.from("tasks").insert({
       title: title.trim(), description: description.trim(), reward_usdc: String(reward_usdc),
       correct_answer: correct_answer.trim(), created_by, blockchain_task_id: chainTaskId.toString(),
       create_tx_hash, fund_tx_hash, contract_version: "v2",
     }).select(PUBLIC_TASK_FIELDS).single();
     if (error) {
-      const { data: raced } = await supabase.from("tasks").select(PUBLIC_TASK_FIELDS).eq("create_tx_hash", create_tx_hash).maybeSingle();
+      const { data: raced } = await db.from("tasks").select(PUBLIC_TASK_FIELDS).eq("create_tx_hash", create_tx_hash).maybeSingle();
       if (raced) return NextResponse.json({ task: raced, recovered: true }, { status: 200 });
       console.error("Create task metadata insert failed:", {
         code: error.code,
@@ -124,14 +128,15 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  if (!supabase) {
+  const db = supabase;
+  if (!db) {
     return NextResponse.json({ error: "Failed to fetch tasks" }, { status: 500 });
   }
 
   let stage: TaskListFailureStage = "query";
   try {
     const result = await runTaskListQuery(
-      () => supabase!.from("tasks").select(PUBLIC_TASK_FIELDS).eq("status", "open").is("archived_at", null).order("created_at", { ascending: false }),
+      () => db.from("tasks").select(PUBLIC_TASK_FIELDS).eq("status", "open").is("archived_at", null).order("created_at", { ascending: false }),
       (error) => logTaskListFailure(error, "query"),
     );
     if (!result.ok) {
