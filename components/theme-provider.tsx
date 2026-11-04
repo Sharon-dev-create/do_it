@@ -52,12 +52,10 @@ function applyTheme(preference: ThemePreference, resolved = resolveTheme(prefere
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [preference, setPreferenceState] = useState<ThemePreference>(() =>
-    readPreference(),
-  );
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
-    resolveTheme(readPreference()),
-  );
+  // Keep the server render and the browser's first render identical. Read the
+  // saved preference after hydration, when browser-only state is available.
+  const [preference, setPreferenceState] = useState<ThemePreference>("system");
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
 
   const setPreference = useCallback((nextPreference: ThemePreference) => {
     setPreferenceState(nextPreference);
@@ -72,7 +70,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    applyTheme(preference, resolvedTheme);
+    const savedPreference = readPreference();
+    const savedResolvedTheme = resolveTheme(savedPreference);
+    setPreferenceState(savedPreference);
+    setResolvedTheme(savedResolvedTheme);
+    applyTheme(savedPreference, savedResolvedTheme);
 
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== STORAGE_KEY && event.key !== null) return;
